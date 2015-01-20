@@ -39,7 +39,16 @@ class GwinstekLCR8110G (SerialDriver):
     @Feat()
     def measure(self):
         first, second = map(float, self.query(':meas:trig').split(","))
-        return (Q_(first, 'F'), Q_(second, 'S'))
+        return (first, second)
+
+    def measure_stable(self, epsilon=1e-2):
+        meas2 = self.measure
+        while True:
+            meas1 = meas2
+            meas2 = self.measure
+            if abs((meas1[0]-meas2[0])/meas2[0]) < epsilon:
+                return meas2
+
         
 
 if __name__ == '__main__':
