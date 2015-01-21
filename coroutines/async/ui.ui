@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Dialog</class>
+ <widget class="QDialog" name="Dialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>395</width>
+    <height>527</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Dialog</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QPushButton" name="readVoltage">
+     <property name="text">
+      <string>Read voltage</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="voltage">
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="sweep">
+     <property name="text">
+      <string>Sweep current</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="cancel">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="text">
+      <string>Cancel</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTableWidget" name="results">
+     <property name="rowCount">
+      <number>0</number>
+     </property>
+     <property name="columnCount">
+      <number>2</number>
+     </property>
+     <attribute name="horizontalHeaderVisible">
+      <bool>false</bool>
+     </attribute>
+     <attribute name="verticalHeaderVisible">
+      <bool>false</bool>
+     </attribute>
+     <column/>
+     <column/>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLineEdit" name="lineEdit">
+     <property name="text">
+      <string>I'm responsive even while waiting for the instrument! Try me!</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
