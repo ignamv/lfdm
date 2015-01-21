@@ -11,6 +11,14 @@ class Keithley705 (GPIBVisaDriver):
     def channel(self, key):
         return self.channels[key]
 
+    @Action()
+    def open(self, channel):
+        self.channel[channel] = False
+
+    @Action()
+    def close(self, channel):
+        self.channel[channel] = True
+
     @channel.setter
     def channel(self, key, value):
         col, row = key
