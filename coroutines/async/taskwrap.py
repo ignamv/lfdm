@@ -18,6 +18,6 @@ def taskwrap(fn):
     @functools.wraps(fn)
     def create_task(*args, **kwargs):
         loop = asyncio.get_event_loop()
-        task = loop.create_task(coroutine(*args, **kwargs))
+        task = asyncio.async(coroutine(*args, **kwargs))
         task.add_done_callback(task_died)
     return create_task
