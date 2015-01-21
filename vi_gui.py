@@ -1,19 +1,25 @@
-from enum import Enum
-from PyQt4.uic import loadUiType
-from PyQt4.QtCore import pyqtSlot, QThread, pyqtSignal
-from PyQt4.QtGui import QTableWidget, QDialog, QVBoxLayout
-from matplotlib.backends import qt_compat
-from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, \
-        NavigationToolbar2QT
-from matplotlib.figure import Figure
+import asyncio
 import numpy as np
+
+from enum import Enum
 from lantz import Q_
-from logging import DEBUG, INFO
+from lantz.log import log_to_screen
+import logging
+from matplotlib.backends import qt_compat
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, NavigationToolbar2QT
+from matplotlib.figure import Figure
+from PyQt4.QtCore import pyqtSlot
+from PyQt4.uic import loadUiType
+from qtdebug import set_trace
+from taskwrap import taskwrap
 
 from lantzinitializedialog import LantzInitializeDialog
 from keithley220 import Keithley220
 from keithley617 import Keithley617
 from keithley705 import Keithley705
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 form, base = loadUiType('vi.ui')
 
@@ -36,13 +42,14 @@ class VI_GUI(base):
             self))
         # Conectar a instrumentos
         self.i_src = Keithley220('GPIB0::12::INSTR')
+        self.i_src.initialize()
         self.electrometro = Keithley617('GPIB0::28::INSTR')
+        self.electrometro.initialize()
         self.matriz = Keithley705('GPIB0::29::INSTR')
-        instrumentos = [self.i_src, self.electrometro, self.matriz]
-        dialogo = LantzInitializeDialog(instrumentos, self)
-        dialogo.show()
+        self.matriz.initialize()
 
         self.setMidiendo(False)
+        self.ui.empezar.clicked.connect(self.on_empezar_clicked)
 
     @pyqtSlot(bool)
     def on_lineal_toggled(self, state):
@@ -65,64 +72,38 @@ class VI_GUI(base):
     class Estado(Enum):
         idle = 0
         correr = 1
-        pausa = 2
 
-    class Medicion(QThread):
-        corrienteCambio = pyqtSignal(float)
-        tensionMedida = pyqtSignal(float)
+    @asyncio.coroutine
+    def medir(self):
+        self.setMidiendo(True)
+        yield from self.matriz.close_async((2, 1))
+        yield from self.matriz.close_async((4, 3))
+        yield from self.electrometro.update_async(zero_check = False)
+        yield from self.i_src.update_async(
+            current=Q_(self.corrientes[0], 'A'),
+            voltage_limit = Q_(5, 'V'),
+            output = True)
+        for corriente in self.corrientes:
+            logger.info('Corriente nueva: %f A',corriente)
+            tension = corriente * 1e3
+            logger.info('Tensión nueva: %f A', tension)
+            logger.debug(self.puntos)
+            logger.debug(self.corrientes)
+            logger.debug(self.tensiones)
+            self.tensiones[self.puntos] = tension
+            self.plot.set_xdata(self.corrientes[:self.puntos])
+            self.plot.set_ydata(self.tensiones[:self.puntos])
+            self.puntos += 1
+            self.canvas.draw()
 
-        def __init__(self, parent, corrientes):
-            super().__init__(parent)
-            self.corrientes = corrientes
-
-        def run(self):
-            try:
-                self.medir()
-            finally:
-                self.terminar()
-            self.exit()
-
-        def medir(self):
-            i_src = self.parent().i_src
-            electrometro = self.parent().electrometro
-            matriz = self.parent().matriz
-
-            matriz.channel[(2,1)] = True
-            matriz.channel[(4,3)] = True
-            electrometro.zero_check = False
-
-            i_src.current = Q_(self.corrientes[0], 'A')
-            i_src.voltage_limit = Q_(5, 'V')
-            self.parent().i_src.output = True
-            for corriente in self.corrientes:
-                #i_src.current = Q_(corriente, 'A')
-                self.corrienteCambio.emit(corriente)
-                #self.tensionMedida.emit(electrometro.stable_voltage())
-                self.tensionMedida.emit(corriente * 1e3)
-
-        def terminar(self):
-            i_src = self.parent().i_src
-            electrometro = self.parent().electrometro
-            matriz = self.parent().matriz
-
-            i_src.current = Q_(0, 'A')
-            i_src.output = False
-            electrometro.zero_check = True
-            matriz.reset()
-
-    @pyqtSlot(float)
-    def on_corrienteCambio(self, corriente):
-        self.corriente = corriente
-        INFO.log('Corriente nueva: {}A',corriente)
-
-    @pyqtSlot(float)
-    def on_tensionMedida(self, tension):
-        print('Tensión medida: {}V'.format(tension))
-        self.tensiones[self.puntos] = tension
-        self.plot.set_xdata(self.corrientes[:self.puntos])
-        self.plot.set_ydata(self.tensiones[:self.puntos])
-        self.puntos += 1
-        self.canvas.draw()
+    @asyncio.coroutine
+    def terminar(self):
+        yield from self.i_src.update_async(dict(
+            current = Q_(0, 'A'),
+            output = False))
+        yield from self.electrometro.update_async(dict(zero_check = True))
+        yield from self.matriz.reset_async()
+        self.setMidiendo(False)
 
     def setMidiendo(self, midiendo):
         self.midiendo = midiendo
@@ -130,11 +111,9 @@ class VI_GUI(base):
         self.ui.terminar.setEnabled(midiendo)
 
     @pyqtSlot()
-    def on_thread_finished(self):
-        self.setMidiendo(False)
-
-    @pyqtSlot()
+    @taskwrap
     def on_empezar_clicked(self):
+        logger.debug('Empezar')
         corriente_inicial = Q_(self.ui.corriente_inicial.text())\
                 .to('A').magnitude
         corriente_final = Q_(self.ui.corriente_final.text())\
@@ -144,25 +123,26 @@ class VI_GUI(base):
             self.corrientes = np.arange(corriente_inicial, corriente_final,
                     incremento)
         else:
-            puntos_por_decada = int(self.parent().ui.puntos_por_decada.text())
+            puntos_por_decada = int(self.ui.puntos_por_decada.text())
             self.corrientes = np.power(10, np.arange(
                 np.log10(corriente_inicial), np.log10(corriente_final),
                 1. / puntos_por_decada))
         self.tensiones = np.empty(len(self.corrientes))
         self.puntos = 0
         self.plot, = self.axes.plot([], [], 'x', label='Hola')
+        try:
+            yield from self.medir()
+        finally:
+            yield from self.terminar()
 
-        self.setMidiendo(True)
-        self.thread = self.Medicion(self.corrientes, self)
-        self.thread.corrienteCambio.connect(self.on_corrienteCambio)
-        self.thread.tensionMedida.connect(self.on_tensionMedida)
-        self.thread.start()
-        self.thread.finished.connect(self.on_thread_finished)
-
-from PyQt4.QtGui import QApplication
-from os import sys
-
-app = QApplication(sys.argv)
-ui = VI_GUI()
-ui.show()
-exit(app.exec_())
+if __name__ == '__main__':
+    import sys
+    from PyQt4.QtGui import QApplication
+    from quamash import QEventLoop
+    log_to_screen(logging.DEBUG)
+    app = QApplication(sys.argv)
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop) 
+    ui = VI_GUI()
+    ui.show()
+    exit(loop.run_forever())
