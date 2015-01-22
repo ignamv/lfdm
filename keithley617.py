@@ -52,7 +52,7 @@ class Keithley617 (GPIBVisaDriver):
 
     @zero_check.setter
     def zero_check(self, enable):
-        self.send('Z{}X'.format([0, 1][bool(enable)]))
+        self.send('C{}X'.format([0, 1][bool(enable)]))
 
     @Feat(values={True:1, False:0})
     def zero_correct(self):
@@ -60,7 +60,7 @@ class Keithley617 (GPIBVisaDriver):
 
     @zero_correct.setter
     def zero_correct(self, enable):
-        self.send('C{}X'.format([0, 1][bool(enable)]))
+        self.send('Z{}X'.format([0, 1][bool(enable)]))
 
     @Feat(values=dict(electrometer=0, vsource=1))
     def display_mode(self):
