@@ -1,29 +1,43 @@
 import asyncio
+import traceback
+import taskwrap
+import sys
 import numpy as np
+import logging
+import re
+import os
 
 from enum import Enum
 from lantz import Q_
 from lantz.log import log_to_screen
-import logging
 from matplotlib.backends import qt_compat
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PyQt4.QtCore import pyqtSlot
+from PyQt4.QtCore import pyqtSlot, QSettings, QObject
+from PyQt4.QtGui import QFileDialog
 from PyQt4.uic import loadUiType
 from qtdebug import set_trace
-from taskwrap import taskwrap
 
 from lantzinitializedialog import LantzInitializeDialog
 from keithley220 import Keithley220
 from keithley617 import Keithley617
 from keithley705 import Keithley705
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 form, base = loadUiType('vi.ui')
 
 class VI_GUI(base):
+    savesettings = [
+            ('corriente_inicial', 'text'),
+            ('corriente_final', 'text'),
+            ('incremento', 'text'),
+            ('puntos_por_decada', 'text'),
+            ('lineal', 'checked'),
+            ('geometrico', 'checked'),
+            ('xlog', 'checked'),
+            ('ylog', 'checked'),
+            ]
     def __init__(self, parent=None):
         super().__init__(parent)
         self.ui = form()
@@ -42,14 +56,33 @@ class VI_GUI(base):
             self))
         # Conectar a instrumentos
         self.i_src = Keithley220('GPIB0::12::INSTR')
-        self.i_src.initialize()
         self.electrometro = Keithley617('GPIB0::28::INSTR')
-        self.electrometro.initialize()
         self.matriz = Keithley705('GPIB0::29::INSTR')
-        self.matriz.initialize()
+        self.instruments = [self.i_src, self.matriz, self.electrometro]
+        init = LantzInitializeDialog(self.instruments, parent=self)
+        init.show()
 
         self.setMidiendo(False)
-        self.ui.empezar.clicked.connect(self.on_empezar_clicked)
+        qset = QSettings()
+        for child, property in self.savesettings:
+            string = child + '/' + property
+            if qset.contains(string):
+                self.findChild(QObject, child).setProperty(property,
+                        qset.value(string))
+
+    def closeEvent(self, event):
+        # TODO: interrupt measurement
+        qset = QSettings()
+        for child, property in self.savesettings:
+            qset.setValue(child + '/' + property,
+                    self.findChild(QObject, child).property(property))
+        if self.midiendo:
+            event.ignore()
+            return
+        init = LantzInitializeDialog(self.instruments, parent=self,
+                finalize=True)
+        init.show()
+        return super().closeEvent(event)
 
     @pyqtSlot(bool)
     def on_lineal_toggled(self, state):
@@ -78,22 +111,24 @@ class VI_GUI(base):
         self.setMidiendo(True)
         yield from self.matriz.close_async((2, 1))
         yield from self.matriz.close_async((4, 3))
-        yield from self.electrometro.update_async(zero_check = False)
+        yield from self.electrometro.update_async(zero_check = False,
+                zero_correct = False)
         yield from self.i_src.update_async(
-            current=Q_(self.corrientes[0], 'A'),
+            current=self.corrientes[0],
             voltage_limit = Q_(5, 'V'),
             output = True)
-        for corriente in self.corrientes:
-            logger.info('Corriente nueva: %f A',corriente)
-            tension = corriente * 1e3
-            logger.info('Tensión nueva: %f A', tension)
-            logger.debug(self.puntos)
-            logger.debug(self.corrientes)
-            logger.debug(self.tensiones)
-            self.tensiones[self.puntos] = tension
-            self.plot.set_xdata(self.corrientes[:self.puntos])
-            self.plot.set_ydata(self.tensiones[:self.puntos])
-            self.puntos += 1
+        # Stabilize output
+        yield from asyncio.sleep(.5)
+        for ii, corriente in enumerate(self.corrientes):
+            #yield from self.i_src.update_async(current=corriente)
+            logger.debug('Corriente %d/%d: %s', ii + 1, len(self.corrientes),
+                    corriente)
+            #tension = yield from self.electrometro.refresh_async('voltage')
+            tension = corriente * Q_(1.034, 'kOhm')
+            logger.debug('Tensión: %s', tension)
+            self.tensiones[ii] = tension
+            self.plot.set_xdata(self.corrientes[:ii].magnitude)
+            self.plot.set_ydata(self.tensiones[:ii].magnitude)
             self.canvas.draw()
 
     @asyncio.coroutine
@@ -111,7 +146,7 @@ class VI_GUI(base):
         self.ui.terminar.setEnabled(midiendo)
 
     @pyqtSlot()
-    @taskwrap
+    @taskwrap.taskwrap
     def on_empezar_clicked(self):
         logger.debug('Empezar')
         corriente_inicial = Q_(self.ui.corriente_inicial.text())\
@@ -120,26 +155,56 @@ class VI_GUI(base):
                 .to('A').magnitude
         if self.ui.lineal.isChecked():
             incremento = Q_(self.ui.incremento.text()).to('A').magnitude
-            self.corrientes = np.arange(corriente_inicial, corriente_final,
-                    incremento)
+            self.corrientes = Q_(np.arange(corriente_inicial, corriente_final,
+                    incremento), 'A')
         else:
             puntos_por_decada = int(self.ui.puntos_por_decada.text())
-            self.corrientes = np.power(10, np.arange(
-                np.log10(corriente_inicial), np.log10(corriente_final),
-                1. / puntos_por_decada))
-        self.tensiones = np.empty(len(self.corrientes))
-        self.puntos = 0
+            self.corrientes = Q_(np.power(10, np.arange(
+                np.log10(corriente_inicial), np.log10(corriente_final) + 
+                1.5 / puntos_por_decada, 1. / puntos_por_decada)), 'A')
+        logger.debug('Voy a medir corrientes %s', self.corrientes)
+        self.tensiones = Q_(np.empty(len(self.corrientes)), 'V')
         self.plot, = self.axes.plot([], [], 'x', label='Hola')
         try:
             yield from self.medir()
+        except Exception as e:
+            logger.error(''.join(traceback.format_exception(*sys.exc_info())))
         finally:
             yield from self.terminar()
+        qset = QSettings()
+        filename = QFileDialog.getSaveFileName(self, 'Guardar medición',
+                qset.value('path', ''), '*.txt;;*.*')
+        if filename == '':
+            return
+        # If filename ends with a counter, increment it and save as default
+        match = re.match(r'(.*)_(\d\d\d)\.(.*)$', filename)
+        if match:
+            qset.setValue('path', '{}_{:03d}.{}'.format(match.group(1),
+                int(match.group(2)) + 1, match.group(3)))
+        else:
+            qset.setValue('path', re.sub(r'(\.\w+|)$', r'_001\1', filename))
+        fd = open(filename, 'w', encoding='utf8')
+        fd.write('# Corriente inicial: {:e}A\n'.format(corriente_inicial))
+        fd.write('# Corriente final: {:e}A\n'.format(corriente_final))
+        if self.ui.lineal.isChecked():
+            fd.write('# Incremento: {:e}A\n'.format(incremento))
+        else:
+            fd.write('# {} puntos por decada\n'.format(puntos_por_decada))
+        fd.write('# Corriente[A]\tTension[V]')
+        for ii in range(len(self.corrientes)):
+            fd.write('{:e}\t{:e}\n'.format(self.corrientes[ii].magnitude,
+                self.tensiones[ii].magnitude))
+        fd.close()
+
 
 if __name__ == '__main__':
     import sys
     from PyQt4.QtGui import QApplication
+    from PyQt4.QtCore import QCoreApplication
+    QCoreApplication.setOrganizationName('LFDM')
+    QCoreApplication.setApplicationName('VI_GUI')
     from quamash import QEventLoop
-    log_to_screen(logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG, filename='error.log', mode='w')
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop) 
