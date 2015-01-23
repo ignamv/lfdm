@@ -6,9 +6,10 @@ from struct import unpack
 import numpy as np
 from time import sleep
 
+format_strings = dict(boolean='{:d}', nr1='{:d}', nr2='{:f}', nr3='{:E}',
+        nrf='{:e}')
+
 def MyFeat(command, fmt, *args, **kwargs):
-    format_strings = dict(boolean='{:d}', nr1='{:d}', nr2='{:f}', nr3='{:E}',
-            nrf='{:e}')
     parse = Parser(format_strings[fmt])
 
     def setter(self, value):
