@@ -38,7 +38,6 @@ def HP8112AFeat(command, limits=None):
 class HP8112A (GPIBVisaDriver):
     RECV_TERMINATION = '\r\n'
     SEND_TERMINATION = '\r\n'
-    QUERY_PAUSE = .2
 
     BUFFER_NOT_EMPTY = 0x80
 
@@ -71,32 +70,34 @@ class HP8112A (GPIBVisaDriver):
     def settings(self):
         return self.query('CST')
 
-    @Feat(values=dict(normal='1', trigger='2', gate='3', ewid='4', 
-        ebur='5'))
+    @Feat(values=dict(normal='1', trigger='2', gate='3', external_width='4', 
+        external_burst='5'))
     def trigger_mode(self):
         return re.match(r' *M([1-5]),', self.settings).group(1)
+
+    @trigger_mode.setter
+    def trigger_mode(self, value):
+        self.send('M' + value)
 
     @Feat(values={True: '1', False: '0'})
     def complement(self):
         return re.match(r'.*,C([01]),', self.settings).group(1)
 
-    @complement.setter(self, value):
+    @complement.setter
+    def complement(self, value):
         self.send('C' + value)
 
     @Feat(values={True: '1', False: '0'})
     def enable(self):
         return re.match(r'.*,D([01]),', self.settings).group(1)
 
-    @enable.setter(self, value):
+    @enable.setter
+    def enable(self, value):
         self.send('D' + value)
-
-    @trigger_mode.setter
-    def trigger_mode(self, value):
-        self.send('M' + value)
 
     @Action()
     def trigger(self):
-        self.send('GET')
+        super().trigger()
 
     period = HP8112AFeat('PER', (Q_(20, 'ns'), Q_(950, 'ms')))
     delay = HP8112AFeat('DEL', (Q_(75, 'ns'), Q_(950, 'ms')))
