@@ -1,8 +1,9 @@
 from lantz import Feat, Q_, Action, LOGGER
-from lantz.visa import GPIBVisaDriver
-from lantz.log import log_to_screen, DEBUG
-from time import sleep, time
 from lantz.driver import _DriverType
+from lantz.log import log_to_screen, DEBUG
+from lantz.ui.app import start_test_app
+from lantz.visa import GPIBVisaDriver
+from time import sleep, time
 import pyvisa.constants
 import re
 
@@ -79,6 +80,14 @@ class HP8112A (GPIBVisaDriver):
     def trigger_mode(self, value):
         self.send('M' + value)
 
+    @Feat(values=dict(off='0', positive='1', negative='2', both='3'))
+    def trigger_control(self):
+        return re.match(r',T([0-3]),', self.settings).group(1)
+
+    @trigger_control.setter
+    def trigger_control(self, value):
+        self.send('T' + value)
+
     @Feat(values={True: '1', False: '0'})
     def complement(self):
         return re.match(r'.*,C([01]),', self.settings).group(1)
@@ -119,4 +128,6 @@ if __name__ == '__main__':
     log_to_screen(DEBUG)
     inst = HP8112A('GPIB0::11::INSTR')
     inst.initialize()
+    start_test_app(inst)
+    inst.finalize()
     print(inst.refresh())
