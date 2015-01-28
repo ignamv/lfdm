@@ -4,7 +4,6 @@ import taskwrap
 import sys
 import numpy as np
 import logging
-import re
 import os
 
 from enum import Enum
@@ -13,13 +12,13 @@ from lantz.log import log_to_screen
 from matplotlib.backends import qt_compat
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PyQt4.QtCore import pyqtSlot, QObject, QSettings
-from PyQt4.QtGui import QFileDialog
+from PyQt4.QtCore import pyqtSlot, QObject
 from PyQt4.uic import loadUiType
 from qtdebug import set_trace
 
 from lantzinitializedialog import LantzInitializeDialog
 from savesettings import SaveSettings
+from autoincrement_file import get_save_filename
 from keithley220 import Keithley220
 from keithley617 import Keithley617
 from keithley705 import Keithley705
@@ -116,7 +115,7 @@ class VI_GUI(base):
             logger.debug('Corriente %d/%d: %s', ii + 1, len(self.corrientes),
                     corriente)
             #tension = yield from self.electrometro.refresh_async('voltage')
-            tension = corriente * Q_(1.034, 'kOhm')
+            tension = corriente * Q_(1.034, 'kohm')
             logger.debug('Tensión: %s', tension)
             self.tensiones[ii] = tension
             self.plot.set_xdata(self.corrientes[:ii].magnitude)
@@ -163,18 +162,10 @@ class VI_GUI(base):
             logger.error(''.join(traceback.format_exception(*sys.exc_info())))
         finally:
             yield from self.terminar()
-        qset = QSettings()
-        filename = QFileDialog.getSaveFileName(self, 'Guardar medición',
-                qset.value('path', ''), '*.txt;;*.*')
+        filename = get_save_filename(self, caption='Guardar medición',
+                filter='*.txt;;*.*')
         if filename == '':
             return
-        # If filename ends with a counter, increment it and save as default
-        match = re.match(r'(.*)_(\d\d\d)\.(.*)$', filename)
-        if match:
-            qset.setValue('path', '{}_{:03d}.{}'.format(match.group(1),
-                int(match.group(2)) + 1, match.group(3)))
-        else:
-            qset.setValue('path', re.sub(r'(\.\w+|)$', r'_001\1', filename))
         fd = open(filename, 'w', encoding='utf8')
         fd.write('# Corriente inicial: {:e}A\n'.format(corriente_inicial))
         fd.write('# Corriente final: {:e}A\n'.format(corriente_final))
@@ -196,6 +187,9 @@ if __name__ == '__main__':
     QCoreApplication.setOrganizationName('LFDM')
     QCoreApplication.setApplicationName('VI_GUI')
     from quamash import QEventLoop
+    consola = logging.StreamHandler()
+    consola.setLevel(logging.DEBUG)
+    logger.addHandler(consola)
     logging.basicConfig(level=logging.DEBUG, filename='error.log', mode='w')
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
