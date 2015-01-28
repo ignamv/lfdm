@@ -13,12 +13,13 @@ from lantz.log import log_to_screen
 from matplotlib.backends import qt_compat
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PyQt4.QtCore import pyqtSlot, QSettings, QObject
+from PyQt4.QtCore import pyqtSlot, QObject, QSettings
 from PyQt4.QtGui import QFileDialog
 from PyQt4.uic import loadUiType
 from qtdebug import set_trace
 
 from lantzinitializedialog import LantzInitializeDialog
+from savesettings import SaveSettings
 from keithley220 import Keithley220
 from keithley617 import Keithley617
 from keithley705 import Keithley705
@@ -63,19 +64,10 @@ class VI_GUI(base):
         init.show()
 
         self.setMidiendo(False)
-        qset = QSettings()
-        for child, property in self.savesettings:
-            string = child + '/' + property
-            if qset.contains(string):
-                self.findChild(QObject, child).setProperty(property,
-                        qset.value(string))
+        SaveSettings(self.savesettings, self)
 
     def closeEvent(self, event):
         # TODO: interrupt measurement
-        qset = QSettings()
-        for child, property in self.savesettings:
-            qset.setValue(child + '/' + property,
-                    self.findChild(QObject, child).property(property))
         if self.midiendo:
             event.ignore()
             return
