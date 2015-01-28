@@ -38,7 +38,9 @@ class CV_Pulsada(object):
         yield from self.gen.update_async(trigger_control = 'negative')
         yield from self.gen.update_async(trigger_mode = 'external_width')
         yield from self.gen.update_async(trigger_control = 'positive')
-        yield from self.sleep(self._ancho)
+        # El instrumento interpreta el ancho como ancho altura mitad
+        # Imito este comportamiento
+        yield from self.sleep(self._ancho + .5 * (leading - trailing))
         yield from self.gen.update_async(trigger_control = 'negative')
         yield from self.sleep(trailing)
 
