@@ -18,7 +18,7 @@ def HP8112ADictFeat(command, values):
         self.send(command + value)
     def getter(self):
         return self.query('I' + command)[len(command):]
-    feat = Feat(values=values)
+    feat = Feat(values=values, read_once=True)
     feat.setter(setter)
     feat.getter(getter)
     return feat
@@ -31,7 +31,7 @@ def HP8112AFeat(command, limits=None):
         return HP8112A.process_response(self.query('I' + command))
     limits = (limits[0].to(units).magnitude,
               limits[1].to(units).magnitude)
-    feat = Feat(limits=limits, units=units)
+    feat = Feat(limits=limits, units=units, read_once=True)
     feat.setter(setter)
     feat.getter(getter)
     return feat
