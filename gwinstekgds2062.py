@@ -1,10 +1,11 @@
-from lantz import Feat, DictFeat, Action
-from lantz.visa import GPIBVisaDriver
+from lantz import Feat, DictFeat, Action, Q_
 from lantz.visa import MessageVisaDriver
+from lantz.ui.app import start_test_app
 from stringparser import Parser
 from struct import unpack
 import numpy as np
-from time import sleep
+from time import sleep, time
+import pyvisa.constants as vi
 
 format_strings = dict(boolean='{:d}', nr1='{:d}', nr2='{:f}', nr3='{:E}',
         nrf='{:e}')
@@ -18,7 +19,7 @@ def MyFeat(command, fmt, *args, **kwargs):
     def getter(self):
         return parse(self.query(command + '?').strip())
 
-    return Feat(*args, fset=setter, fget=getter, **kwargs)
+    return Feat(*args, fset=setter, fget=getter, read_once=True, **kwargs)
 
 def MyChanFeat(command, fmt, *args, **kwargs):
     parse = Parser(format_strings[fmt])
@@ -30,7 +31,8 @@ def MyChanFeat(command, fmt, *args, **kwargs):
     def getter(self, channel):
         return parse(self.query(command.format(channel) + '?').strip())
 
-    return DictFeat(*args, fset=setter, fget=getter, **kwargs)
+    return DictFeat(*args, fset=setter, fget=getter, keys=[1,2],
+            read_once=True, **kwargs)
 
 class GwinstekGDS2062(MessageVisaDriver):
 
@@ -38,11 +40,39 @@ class GwinstekGDS2062(MessageVisaDriver):
     def idn(self):
         return self.query('*IDN?')
 
-    # TODO: make this sane. Reading returns number of points, but only 0 or 1
-    # can be written
+
+    # TODO: make record_length sane. Reading returns number of points, but 
+    # only 0 or 1 can be written
     record_length = MyFeat(':acquire:length', 'boolean')
+    averaging = MyFeat(':acquire:average', 'nr1', values={2**ii: ii
+        for ii in range(1, 9)})
+    mode = MyFeat(':acquire:mode', 'nr1', values=dict(normal=0, peak=1,
+        average=2))
+    bandwidth_limit = MyChanFeat(':channel{}:bwlimit', 'nr1',
+            values={True: 1, False: 0})
+    coupling = MyChanFeat(':channel{}:coupling', 'nr1',
+            values=dict(ac=0, dc=1, ground=2))
+    display = MyChanFeat(':channel{}:display', 'nr1', 
+            values={True: 1, False: 0})
+    invert = MyChanFeat(':channel{}:invert', 'nr1', 
+            values={True: 1, False: 0})
     offset = MyChanFeat(':channel{}:offset', 'nr3', units='V')
-    scale = MyChanFeat(':channel{}:scale', 'nr3', units='V')
+    voltage_scale = MyChanFeat(':channel{}:scale', 'nr3', units='V')
+    trigger_level = MyFeat(':trigger:level', 'nr3', units='V')
+    trigger_mode = MyFeat(':trigger:mode', 'nr1', values=dict(auto_level=0, 
+        auto=1, normal=2, single=3))
+    trigger_couple = MyFeat(':trigger:couple', 'nr1', values=dict(ac=0, dc=1))
+    trigger_slope = MyFeat(':trigger:slope', 'nr1', values=dict(rising=0,
+        falling=1))
+    trigger_source = MyFeat(':trigger:source', 'nr1', values={1: 0, 2: 1, 3: 2,
+        4: 3, 'external': 4, 'line': 5})
+    trigger_type = MyFeat(':trigger:type', 'nr1', values=dict(edge=0, video=1,
+        pulse=2, delay=3))
+    delay = MyFeat(':timebase:delay', 'nr3', units='s')
+    time_scales = Q_(np.concatenate(tuple(np.array([1., 2.5, 5.]) * 10**ii
+        for ii in range(-9, 2)))[:-2], 's')
+    time_scale = MyFeat(':timebase:scale', 'nr3', units='s')
+    
 
     @Action()
     def run(self):
@@ -53,11 +83,13 @@ class GwinstekGDS2062(MessageVisaDriver):
         self.send(':stop')
 
     def acquire(self, channel):
-        if channel not in [1, 2]:
-            raise KeyError('Invalid channel {}'.format(channel))
+                #vi.VI_ATTR_ASRL_END_IN: vi.VI_ASRL_END_NONE
+        #if channel not in [1, 2]:
+            #raise KeyError('Invalid channel {}'.format(channel))
         self.send(':acquire{}:memory?'.format(channel))
         # Response format in programmer's manual page 29
         data = self.read_block()
+        return data
         deltaT = unpack('>f', data[:4])
         channel_ = data[4]
         if channel_ != channel:
@@ -65,29 +97,25 @@ class GwinstekGDS2062(MessageVisaDriver):
         # 3 reserved bytes
         raw = np.frombuffer(data[8:], dtype=np.int16)
         range = np.iinfo(raw.dtype).max - np.iinfo(raw.dtype).min
-        return raw / range * self.scale[channel] * 10
+        return raw / range * self.voltage_scale[channel] * 10
 
 if __name__ == '__main__':
     from lantz.log import log_to_screen, DEBUG
+    import matplotlib
+    print(matplotlib.get_backend())
+    print(matplotlib.get_configdir())
     from matplotlib import pyplot as plt
     log_to_screen(DEBUG)
 #   inst = GwinstekGDS2062('ASRL6::INSTR',
 #       library_path=r'C:\windows\system32\visa32.Agilent Technologies.dll')
     inst = GwinstekGDS2062('ASRL5::INSTR')
     inst.initialize()
-    print(inst.idn)
-    inst.record_length = 0
-    print(inst.record_length)
-    print(inst.offset[1])
-    print(inst.scale[1])
-    inst.stop()
-    ch1 = inst.acquire(1)
-    sleep(.7777)
-    ch2 = inst.acquire(2)
-    inst.run()
-    np.savetxt('salida.txt', ch1)
-    plt.plot(ch1)
-    plt.hold(True)
-    plt.plot(ch2)
-    plt.show()
-
+    print(inst.refresh())
+    from time import time
+    for largo in [0, 1]:
+        inst.record_length = largo
+        inicial = time()
+        inst.acquire(1)
+        inst.acquire(2)
+        final = time()
+        print('Con record_length={} tarda {}s'.format(largo, final - inicial))
