@@ -30,6 +30,19 @@ class CV_Pulsada(object):
             yield from self.pulso_normal()
 
     @asyncio.coroutine
+    def configurar_osciloscopio(self):
+        high, low, leading, trailing = yield from self.gen.refresh_async(
+                ['high_level', 'low_level', 'leading_edge', 'trailing_edge'])
+        time_scale = next(tt for tt in self.osc.time_scales 
+                if tt > leading / 8.)
+        yield from self.osc.update_async(trigger_level = high + low,
+                trigger_slope='rising', trigger_source=1, 
+                trigger_mode='single', trigger_couple='dc',
+                trigger_type='edge', delay=Q_(0, 's'),
+                time_scale=time_scale, record_length=0)
+
+
+    @asyncio.coroutine
     def pulso_manual(self):
         # Para no pedirlo en medio del pulso
         leading, trailing = yield from self.gen.refresh_async(
@@ -40,7 +53,9 @@ class CV_Pulsada(object):
         yield from self.gen.update_async(trigger_control = 'positive')
         # El instrumento interpreta el ancho como ancho altura mitad
         # Imito este comportamiento
-        yield from self.sleep(self._ancho + .5 * (leading - trailing))
+        yield from self.sleep(.5 * self._ancho)
+        self.osc.update_async(trigger_slope='falling')
+        yield from self.sleep(.5 * self._ancho + .5 * (leading - trailing))
         yield from self.gen.update_async(trigger_control = 'negative')
         yield from self.sleep(trailing)
 
@@ -57,6 +72,17 @@ class CV_Pulsada(object):
     def sleep(self, interval):
         yield from asyncio.sleep(Q_(interval).to('s').magnitude)
 
+@asyncio.coroutine
+def prueba(cv):
+    cv.setAncho(Q_(2, 's'))
+    yield from cv.configurar_osciloscopio()
+    yield from asyncio.sleep(1)
+    yield from cv.osc.run_async()
+    yield from asyncio.sleep(.2)
+    print('Mandando pulso')
+    yield from cv.pulso()
+    print('Listo')
+
 if __name__ == '__main__':
     from hp8112a import HP8112A
     from gwinstekgds2062 import GwinstekGDS2062
@@ -66,3 +92,5 @@ if __name__ == '__main__':
     osc = GwinstekGDS2062('ASRL5::INSTR')
     initialize_many([gen, osc])
     cv = CV_Pulsada(gen, osc)
+    fut = asyncio.async(prueba(cv))
+    asyncio.get_event_loop().run_until_complete(fut)
