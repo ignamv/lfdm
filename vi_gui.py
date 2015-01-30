@@ -60,9 +60,16 @@ class VI_GUI(base):
         self.matriz = Keithley705('GPIB0::29::INSTR')
         self.instruments = [self.i_src, self.matriz, self.electrometro]
         init = LantzInitializeDialog(self.instruments, parent=self)
+        init.finished.connect(self.on_init_finished)
         init.show()
+        self.setEnabled(False)
 
+    @pyqtSlot(bool)
+    def on_init_finished(self, success):
+        self.simulate = not success
+        logger.debug("Initialization finished: %s", str(success))
         self.setMidiendo(False)
+        self.setEnabled(True)
         SaveSettings(self.savesettings, self)
 
     def closeEvent(self, event):
@@ -111,12 +118,13 @@ class VI_GUI(base):
         # Stabilize output
         yield from asyncio.sleep(.5)
         for ii, corriente in enumerate(self.corrientes):
-            #yield from self.i_src.update_async(current=corriente)
-            logger.debug('Corriente %d/%d: %s', ii + 1, len(self.corrientes),
-                    corriente)
-            #tension = yield from self.electrometro.refresh_async('voltage')
-            tension = corriente * Q_(1.034, 'kohm')
-            logger.debug('Tensión: %s', tension)
+            yield from self.i_src.update_async(current=corriente)
+            logger.debug('Corriente %03d/%03d: %s', ii + 1,
+                    len(self.corrientes), '{:.3e~}'.format(corriente))
+            tension, nn = yield from self.electrometro.stable_voltage_async(
+                    .01)
+            logger.debug('Tensión: %s (%d mediciones)',
+                    '{:.3e~}'.format(tension), nn)
             self.tensiones[ii] = tension
             self.plot.set_xdata(self.corrientes[:ii].magnitude)
             self.plot.set_ydata(self.tensiones[:ii].magnitude)
@@ -156,12 +164,15 @@ class VI_GUI(base):
         logger.debug('Voy a medir corrientes %s', self.corrientes)
         self.tensiones = Q_(np.empty(len(self.corrientes)), 'V')
         self.plot, = self.axes.plot([], [], 'x', label='Hola')
-        try:
-            yield from self.medir()
-        except Exception as e:
-            logger.error(''.join(traceback.format_exception(*sys.exc_info())))
-        finally:
-            yield from self.terminar()
+        if not self.simulate:
+            try:
+                yield from self.medir()
+            except Exception as e:
+                logger.error(''.join(traceback.format_exception(*sys.exc_info())))
+            finally:
+                yield from self.terminar()
+        else:
+            self.tensiones = (self.corrientes * Q_(1,'kohm')).to('V')
         filename = get_save_filename(self, caption='Guardar medición',
                 filter='*.txt;;*.*')
         if filename == '':
@@ -173,7 +184,7 @@ class VI_GUI(base):
             fd.write('# Incremento: {:e}A\n'.format(incremento))
         else:
             fd.write('# {} puntos por decada\n'.format(puntos_por_decada))
-        fd.write('# Corriente[A]\tTension[V]')
+        fd.write('# Corriente[A]\tTension[V]\n')
         for ii in range(len(self.corrientes)):
             fd.write('{:e}\t{:e}\n'.format(self.corrientes[ii].magnitude,
                 self.tensiones[ii].magnitude))
