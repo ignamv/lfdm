@@ -26,13 +26,16 @@ class Keithley617 (GPIBVisaDriver):
         self.execute()
         return self.recv()
 
-    def stable_voltage(self, epsilon=1e-3):
+    @Action()
+    def stable_voltage(self, epsilon):
         ret = self.voltage
+        measurements = 0
         while True:
             last = ret
             ret = self.voltage
             if abs(last-ret)/ret < epsilon:
-                return ret
+                return (ret, measurements)
+            measurements += 1
 
     @Action()
     def execute(self):
