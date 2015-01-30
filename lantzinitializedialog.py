@@ -1,6 +1,6 @@
 import asyncio
 from PyQt4.QtGui import QDialog, QTableWidget, QVBoxLayout, QTableWidgetItem
-from PyQt4.QtCore import Qt
+from PyQt4.QtCore import Qt, pyqtSignal
 import taskwrap
 import logging
 
@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class LantzInitializeDialog(QDialog):
+    # True for success, False if any instruments did not initialize
+    finished = pyqtSignal(bool)
+
     def __init__(self, instruments, parent=None, finalize=False):
         super().__init__(parent)
         self.finalize = finalize
@@ -33,8 +36,10 @@ class LantzInitializeDialog(QDialog):
         logger.debug(self.prefix + 'izing %s', instrument.name)
         row = self.instruments.index(instrument)
         try:
-            yield from instrument._submit([instrument.initialize,
-                instrument.finalize][self.finalize])
+            if self.finalize:
+                yield from instrument.finalize_async()
+            else:
+                yield from instrument.initialize_async()
         except Exception as e:
             logger.error('%sizing %s: %s', self.prefix, instrument.name,
                     str(e))
@@ -49,7 +54,10 @@ class LantzInitializeDialog(QDialog):
                     for inst in self.instruments]
         results = yield from asyncio.gather(*futures)
         if all(results):
+            self.finished.emit(True)
             self.close()
+        else:
+            self.finished.emit(False)
 
 if __name__ == '__main__':
     from PyQt4.QtGui import QApplication
