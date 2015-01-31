@@ -22,6 +22,7 @@ from autoincrement_file import get_save_filename
 from keithley220 import Keithley220
 from keithley617 import Keithley617
 from keithley705 import Keithley705
+import tipiplot
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +44,11 @@ class VI_GUI(base):
         self.ui = form()
         self.ui.setupUi(self)
         # Set up grafico
-        self.figure = Figure(frameon=False)
+        self.plot = tipiplot.TipiPlot(self)
         self.axes = self.figure.add_axes((.1,.1,.85,.85), xscale='log',
                 yscale='log')
-        self.axes.set_xlim((1e-10, 1e-2))
-        self.axes.set_ylim((1e-6, 1e1))
+        self.plot.axes.set_xlim((1e-10, 1e-2))
+        self.plot.axes.set_ylim((1e-6, 1e1))
         self.axes.hold(True)
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.canvas.setMinimumSize(320, 240)
@@ -93,8 +94,8 @@ class VI_GUI(base):
     escalas = ['linear', 'log']
     @pyqtSlot(bool)
     def on_xlog_toggled(self, state):
-        self.axes.set_xscale(self.escalas[state])
-        self.canvas.draw()
+        self.plot.axes.set_xscale(self.escalas[state])
+        self.plot.canvas.draw()
     @pyqtSlot(bool)
     def on_ylog_toggled(self, state):
         self.axes.set_yscale(self.escalas[state])
@@ -163,7 +164,7 @@ class VI_GUI(base):
                 1.5 / puntos_por_decada, 1. / puntos_por_decada)), 'A')
         logger.debug('Voy a medir corrientes %s', self.corrientes)
         self.tensiones = Q_(np.empty(len(self.corrientes)), 'V')
-        self.plot, = self.axes.plot([], [], 'x', label='Hola')
+        self.plot, = self.plot.axes.plot([], [], 'x', label='Hola')
         if not self.simulate:
             try:
                 yield from self.medir()
