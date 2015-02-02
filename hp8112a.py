@@ -82,7 +82,7 @@ class HP8112A (GPIBVisaDriver):
 
     @Feat(values=dict(off='0', positive='1', negative='2', both='3'))
     def trigger_control(self):
-        return re.match(r',T([0-3]),', self.settings).group(1)
+        return re.search(r',T([0-3]),', self.settings).group(1)
 
     @trigger_control.setter
     def trigger_control(self, value):
@@ -90,15 +90,15 @@ class HP8112A (GPIBVisaDriver):
 
     @Feat(values={True: '1', False: '0'})
     def complement(self):
-        return re.match(r'.*,C([01]),', self.settings).group(1)
+        return re.search(r'.*,C([01]),', self.settings).group(1)
 
     @complement.setter
     def complement(self, value):
         self.send('C' + value)
 
-    @Feat(values={True: '1', False: '0'})
+    @Feat(values={True: '0', False: '1'})
     def enable(self):
-        return re.match(r'.*,D([01]),', self.settings).group(1)
+        return re.search(r'.*,D([01]),', self.settings).group(1)
 
     @enable.setter
     def enable(self, value):
