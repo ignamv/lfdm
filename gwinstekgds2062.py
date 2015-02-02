@@ -31,10 +31,13 @@ def MyChanFeat(command, fmt, *args, **kwargs):
     def getter(self, channel):
         return parse(self.query(command.format(channel) + '?').strip())
 
-    return DictFeat(*args, fset=setter, fget=getter, keys=[1,2],
-            read_once=True, **kwargs)
+    return DictFeat(*args, fset=setter, fget=getter,
+            keys=[1, 2], read_once=True, **kwargs)
 
 class GwinstekGDS2062(MessageVisaDriver):
+    channels = [1, 2]
+    xdivisions = 20 # Only displays 10 on screen
+    ydivisions = 10 # Only displays 8 on screen
 
     @Feat()
     def idn(self):
@@ -57,6 +60,8 @@ class GwinstekGDS2062(MessageVisaDriver):
     invert = MyChanFeat(':channel{}:invert', 'nr1', 
             values={True: 1, False: 0})
     offset = MyChanFeat(':channel{}:offset', 'nr3', units='V')
+    voltage_scales = Q_(np.concatenate(tuple(np.array([1., 2., 5.]) * 10**ii
+        for ii in range(-3, 1)))[1:], 'V')
     voltage_scale = MyChanFeat(':channel{}:scale', 'nr3', units='V')
     trigger_level = MyFeat(':trigger:level', 'nr3', units='V')
     trigger_mode = MyFeat(':trigger:mode', 'nr1', values=dict(auto_level=0, 
@@ -82,22 +87,30 @@ class GwinstekGDS2062(MessageVisaDriver):
     def stop(self):
         self.send(':stop')
 
-    def acquire(self, channel):
-                #vi.VI_ATTR_ASRL_END_IN: vi.VI_ASRL_END_NONE
-        #if channel not in [1, 2]:
-            #raise KeyError('Invalid channel {}'.format(channel))
-        self.send(':acquire{}:memory?'.format(channel))
-        # Response format in programmer's manual page 29
-        data = self.read_block()
-        return data
-        deltaT = unpack('>f', data[:4])
-        channel_ = data[4]
-        if channel_ != channel:
-            raise RuntimeError('Invalid channel reply: {}'.format(channel_))
-        # 3 reserved bytes
-        raw = np.frombuffer(data[8:], dtype=np.int16)
-        range = np.iinfo(raw.dtype).max - np.iinfo(raw.dtype).min
-        return raw / range * self.voltage_scale[channel] * 10
+    @Action()
+    def acquire(self, channels, process=True):
+        ret = []
+        for channel in channels:
+            if channel not in self.channels:
+                raise RuntimeError('Invalid channel: {}'.format(channel))
+            self.send(':acquire{}:memory?'.format(channel))
+            # Response format in programmer's manual page 29
+            data = self.read_block()
+            ret.append(data)
+        if not process:
+            return ret
+        else:
+            return self.process_data(ret)
+
+    def process_data(self, data):
+        ret = []
+        for dd in data:
+            channel = dd[4]
+            deltaT = unpack('>f', dd[:4])
+            raw = np.frombuffer(dd[8:], dtype=np.int16)
+            range = np.iinfo(raw.dtype).max - np.iinfo(raw.dtype).min
+            ret.append(raw / range * self.voltage_scale[channel] * 10)
+        return ret
 
 if __name__ == '__main__':
     from lantz.log import log_to_screen, DEBUG
@@ -111,11 +124,12 @@ if __name__ == '__main__':
     inst = GwinstekGDS2062('ASRL5::INSTR')
     inst.initialize()
     print(inst.refresh())
+    print('Presione una tecla')
+    input()
     from time import time
     for largo in [0, 1]:
         inst.record_length = largo
         inicial = time()
-        inst.acquire(1)
-        inst.acquire(2)
+        inst.acquire([1,2])
         final = time()
         print('Con record_length={} tarda {}s'.format(largo, final - inicial))
