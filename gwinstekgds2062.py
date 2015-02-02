@@ -87,6 +87,19 @@ class GwinstekGDS2062(MessageVisaDriver):
     def stop(self):
         self.send(':stop')
 
+    setup_memories = list(range(1, 21))
+    @Action()
+    def recall_setup(self, memory):
+        if memory not in self.setup_memories:
+            raise RuntimeError('Invalid memory: {}'.format(memory))
+        self.send(':memory{}:recall:setup'.format(memory))
+
+    @Action()
+    def save_setup(self, memory):
+        if memory not in self.setup_memories:
+            raise RuntimeError('Invalid memory: {}'.format(memory))
+        self.send(':memory{}:save:setup'.format(memory))
+
     @Action()
     def acquire(self, channels, process=True):
         ret = []
