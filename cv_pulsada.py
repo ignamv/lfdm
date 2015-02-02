@@ -1,17 +1,21 @@
 from lantz import Q_
-from time import sleep
+import time
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
 class CV_Pulsada(object):
+    SETUP_SUBIDA = 1
+    SETUP_BAJADA = 2
+
     def __init__(self, generador, osciloscopio):
         self.gen = generador
         self.gen.refresh()
         self.osc = osciloscopio
         self.osc.refresh()
         self.setAncho(Q_(1., 's'))
+        self.epsilon = .05
 
     def setAncho(self, ancho):
         self._ancho = ancho
@@ -36,48 +40,55 @@ class CV_Pulsada(object):
         return ret
 
     @asyncio.coroutine
-    def configurar_osciloscopio(self):
+    def configurar(self):
         high, low, leading, trailing = yield from self.gen.refresh_async(
                 ['high_level', 'low_level', 'leading_edge', 'trailing_edge'])
+        trigger1 = 2. * (self.epsilon * high + (1 - self.epsilon) * low)
+        trigger2 = 2. * (self.epsilon * low + (1 - self.epsilon) * high)
         time_scale = next(tt for tt in self.osc.time_scales 
                 if tt >= leading / (self.osc.xdivisions - 2))
+        print('time_scale={}'.format(time_scale))
         voltage_scale = next(vv for vv in self.osc.voltage_scales 
                 if vv >= 2 * (high - low) / (self.osc.ydivisions - 2))
-        yield from self.osc.update_async(trigger_level = high + low,
-                trigger_slope='rising', trigger_source=1, 
+        print('voltage_scale={}'.format(voltage_scale))
+        yield from self.osc.update_async(trigger_level = trigger2,
+                trigger_slope='falling', trigger_source=1, 
                 trigger_mode='single', trigger_couple='dc',
                 trigger_type='edge', time_scale=time_scale,
-                delay=time_scale * (self.osc.xdivisions / 2 - 1),
-                record_length=0,
+                delay=trailing * (.5 - self.epsilon), record_length=0,
                 offset={1: high + low}, voltage_scale={1: voltage_scale})
+        yield from self.osc.save_setup_async(self.SETUP_BAJADA)
+        yield from self.osc.update_async(trigger_slope='rising',
+                trigger_level=trigger1, delay=leading * (.5 - self.epsilon))
+        yield from self.osc.save_setup_async(self.SETUP_SUBIDA)
+
+        yield from self.gen.update_async(trigger_control = 'negative')
 
 
     @asyncio.coroutine
     def pulso_manual(self):
-        # Para no pedirlo en medio del pulso
-        leading, trailing, high, low = yield from self.gen.refresh_async(
-                ['leading_edge', 'trailing_edge', 'high_level', 'low_level'])
-        epsilon = .05
-        trigger1 = 2. * (epsilon * high + (1 - epsilon) * low)
-        trigger2 = 2. * (epsilon * low + (1 - epsilon) * high)
-        yield from self.osc.update_async(trigger_level=trigger1)
+        leading = self.gen.recall('leading_edge')
+        trailing = self.gen.recall('trailing_edge')
+        yield from self.osc.recall_setup_async(self.SETUP_SUBIDA)
+        yield from self.osc.run_async()
         # Evito glitches configurando en este orden
-        yield from self.gen.update_async(trigger_control = 'negative')
         yield from self.gen.update_async(trigger_mode = 'external_width')
+        beginning = time.time()
         yield from self.gen.update_async(trigger_control = 'positive')
         # El instrumento interpreta el ancho como ancho altura mitad
         # Imito este comportamiento
-        yield from self.sleep(leading)
-        self.osc.update_async(trigger_slope='falling', trigger_level=trigger2)
-        fut = self.osc.acquire_async([1], False)
-        self.osc.run_async()
-        yield from self.sleep(self._ancho + .5 * (leading - trailing) - leading)
+        yield from self.sleep(self.osc.recall('time_scale') *
+                self.osc.xdivisions)
+        temp = yield from self.osc.acquire_async([1], False)
+        yield from self.osc.recall_setup_async(self.SETUP_BAJADA)
+        yield from self.osc.run_async()
+        yield from self.sleep(self._ancho + .5 * (leading - trailing) 
+                - leading - 0*Q_(time.time() - beginning, 's'))
         yield from self.gen.update_async(trigger_control = 'negative')
         yield from self.sleep(trailing)
 
-        temp = yield from fut
-        subida = self.osc.process_data(temp)
         bajada = yield from self.osc.acquire_async([1])
+        subida = self.osc.process_data(temp)
         return (subida, bajada)
 
     @asyncio.coroutine
@@ -96,16 +107,14 @@ class CV_Pulsada(object):
 @asyncio.coroutine
 def prueba(cv):
     cv.setAncho(Q_(3, 's'))
-    yield from cv.configurar_osciloscopio()
+    yield from cv.configurar()
     yield from cv.gen.update_async(enable=True)
-    yield from asyncio.sleep(1)
-    yield from cv.osc.run_async()
-    yield from asyncio.sleep(.2)
     print('Mandando pulso')
     subida, bajada = yield from cv.pulso()
     from matplotlib import pyplot as plt
     plt.plot(subida[0], label='Subida')
     plt.plot(bajada[0], label='Bajada')
+    plt.legend()
     plt.savefig('cv.png')
     print('Listo')
 
