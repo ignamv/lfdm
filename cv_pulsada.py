@@ -8,7 +8,9 @@ logger = logging.getLogger(__name__)
 class CV_Pulsada(object):
     def __init__(self, generador, osciloscopio):
         self.gen = generador
+        self.gen.refresh()
         self.osc = osciloscopio
+        self.osc.refresh()
         self.setAncho(Q_(1., 's'))
 
     def setAncho(self, ancho):
