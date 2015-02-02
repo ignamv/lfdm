@@ -1,6 +1,9 @@
 from lantz import Q_
 from time import sleep
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CV_Pulsada(object):
     def __init__(self, generador, osciloscopio):
@@ -87,6 +90,13 @@ if __name__ == '__main__':
     from hp8112a import HP8112A
     from gwinstekgds2062 import GwinstekGDS2062
     from lantz import initialize_many
+    import lantz
+    lantzlog = logging.FileHandler('lantz.log', mode='w')
+    lantz.LOGGER.setLevel(logging.DEBUG)
+    lantz.LOGGER.addHandler(lantzlog)
+    consola = logging.StreamHandler()
+    consola.setLevel(logging.DEBUG)
+    logger.addHandler(consola)
 
     gen = HP8112A('GPIB0::11::INSTR')
     osc = GwinstekGDS2062('ASRL5::INSTR')
