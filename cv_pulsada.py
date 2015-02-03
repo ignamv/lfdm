@@ -71,6 +71,7 @@ class CV_Pulsada(object):
         trailing = self.gen.recall('trailing_edge')
         yield from self.osc.recall_setup_async(self.SETUP_SUBIDA)
         yield from self.osc.run_async()
+        yield from self.sleep(Q_(.6875, 's'))
         # Evito glitches configurando en este orden
         yield from self.gen.update_async(trigger_mode = 'external_width')
         beginning = time.time()
@@ -78,12 +79,12 @@ class CV_Pulsada(object):
         # El instrumento interpreta el ancho como ancho altura mitad
         # Imito este comportamiento
         yield from self.sleep(self.osc.recall('time_scale') *
-                self.osc.xdivisions)
+                self.osc.xdivisions + Q_(120, 'ms'))
         temp = yield from self.osc.acquire_async([1], False)
         yield from self.osc.recall_setup_async(self.SETUP_BAJADA)
         yield from self.osc.run_async()
         yield from self.sleep(self._ancho + .5 * (leading - trailing) 
-                - leading - 0*Q_(time.time() - beginning, 's'))
+                - Q_(time.time() - beginning, 's'))
         yield from self.gen.update_async(trigger_control = 'negative')
         yield from self.sleep(trailing)
 
@@ -106,14 +107,14 @@ class CV_Pulsada(object):
 
 @asyncio.coroutine
 def prueba(cv):
-    cv.setAncho(Q_(3, 's'))
+    cv.setAncho(Q_(1, 's'))
     yield from cv.configurar()
     yield from cv.gen.update_async(enable=True)
     print('Mandando pulso')
     subida, bajada = yield from cv.pulso()
     from matplotlib import pyplot as plt
-    plt.plot(subida[0], label='Subida')
-    plt.plot(bajada[0], label='Bajada')
+    plt.plot(subida[1], label='Subida')
+    plt.plot(bajada[1], label='Bajada')
     plt.legend()
     plt.savefig('cv.png')
     print('Listo')
