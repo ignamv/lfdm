@@ -55,7 +55,7 @@ class CV_Pulsada(object):
                 trigger_slope='falling', trigger_source=1, 
                 trigger_mode='single', trigger_couple='dc',
                 trigger_type='edge', time_scale=time_scale,
-                delay=trailing * (.5 - self.epsilon), record_length=0,
+                delay=trailing * (.5 - self.epsilon), record_length=1,
                 offset={1: high + low}, voltage_scale={1: voltage_scale})
         yield from self.osc.save_setup_async(self.SETUP_BAJADA)
         yield from self.osc.update_async(trigger_slope='rising',
@@ -79,14 +79,15 @@ class CV_Pulsada(object):
         # El instrumento interpreta el ancho como ancho altura mitad
         # Imito este comportamiento
         yield from self.sleep(self.osc.recall('time_scale') *
-                self.osc.xdivisions + Q_(120, 'ms'))
+                self.osc.xdivisions + Q_(200, 'ms'))
         temp = yield from self.osc.acquire_async([1], False)
         yield from self.osc.recall_setup_async(self.SETUP_BAJADA)
         yield from self.osc.run_async()
         yield from self.sleep(self._ancho + .5 * (leading - trailing) 
                 - Q_(time.time() - beginning, 's'))
         yield from self.gen.update_async(trigger_control = 'negative')
-        yield from self.sleep(trailing)
+        yield from self.sleep(self.osc.recall('time_scale') *
+                self.osc.xdivisions + Q_(120, 'ms'))
 
         bajada = yield from self.osc.acquire_async([1])
         subida = self.osc.process_data(temp)
