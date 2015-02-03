@@ -116,13 +116,14 @@ class GwinstekGDS2062(MessageVisaDriver):
             return self.process_data(ret)
 
     def process_data(self, data):
-        ret = []
+        ret = dict()
         for dd in data:
             channel = dd[4]
             deltaT = unpack('>f', dd[:4])
             raw = np.frombuffer(dd[8:], dtype=np.int16)
             range = np.iinfo(raw.dtype).max - np.iinfo(raw.dtype).min
-            ret.append(raw / range * self.voltage_scale[channel] * 10)
+            ret[channel] = raw / range * self.voltage_scale[channel] * 10
+        ret['time'] = deltaT * np.arange(len(raw))
         return ret
 
 if __name__ == '__main__':
