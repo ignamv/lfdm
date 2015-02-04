@@ -109,6 +109,9 @@ class GwinstekGDS2062(MessageVisaDriver):
             self.send(':acquire{}:memory?'.format(channel))
             # Response format in programmer's manual page 29
             data = self.read_block()
+            if all(dd == 0 for dd in data[8:]):
+                # Received all zeros
+                raise RuntimeError('Bad acquisition')
             ret.append(data)
         if not process:
             return ret
