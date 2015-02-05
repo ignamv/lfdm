@@ -2,7 +2,7 @@ from lantz import Q_
 import time
 import asyncio
 import logging
-import sys
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class CV_Pulsada(object):
     def setAncho(self, ancho):
         self._ancho = ancho
         if ancho < Q_(950, 'ms'):
-            self.gen.update_async(width = ancho)
+            self.gen.update(width = ancho)
             self.manual = False
         else:
             self.manual = True
@@ -49,19 +49,16 @@ class CV_Pulsada(object):
         avg = high + low
         span = 2. * (high - low)
         yield from self.gen.update_async(trigger_control = 'negative')
-        time_scale = next(tt for tt in self.osc.time_scales 
-                if tt >= leading / (self.osc.xdivisions - 2))
-        voltage_scale = next(vv for vv in self.osc.voltage_scales 
-                if vv >= 2 * (high - low) / (self.osc.ydivisions - 2))
+        yield from self.osc.fit_time_async(leading)
+        yield from self.osc.fit_voltage_async(span, 1)
         yield from self.osc.update_async(trigger_mode='single')
         yield from self.osc.stop_async()
         yield from self.osc.run_async()
         yield from self.osc.update_async(trigger_level = Q_(0, 'V'),
                 trigger_slope='falling', trigger_source=1, 
-                trigger_couple='dc',
-                trigger_type='edge', time_scale=time_scale,
+                trigger_couple='dc', trigger_type='edge', 
                 delay=Q_(0, 's'), record_length=1,
-                offset={1: -high - low}, voltage_scale={1: voltage_scale})
+                offset={1: -avg})
         yield from self.osc.save_setup_async(self.SETUP_BAJADA)
         yield from self.osc.update_async(trigger_slope='rising')
         yield from self.osc.save_setup_async(self.SETUP_SUBIDA)
@@ -100,11 +97,17 @@ class CV_Pulsada(object):
     @asyncio.coroutine
     def pulso_normal(self):
         # Para no pedirlo en medio del pulso
-        leading, trailing = yield from self.gen.refresh_async(
-                ['leading_edge', 'trailing_edge'])
+        leading, trailing, width = yield from self.gen.refresh_async(
+                ['leading_edge', 'trailing_edge', 'width'])
+        yield from self.osc.fit_time_async(width + .5 * (leading + trailing))
+        yield from self.osc.update_async(delay = .5 * width)
         yield from self.gen.update_async(trigger_mode = 'trigger')
         yield from self.gen.trigger_async()
-        yield from self.sleep(leading + trailing + self._ancho)
+        yield from self.sleep(self.osc.xdivisions *
+                self.osc.recall('time_scale'))
+        pulso = yield from self.osc.acquire_async([1])
+        yield from self.osc.run_async()
+        return pulso
 
     @asyncio.coroutine
     def sleep(self, interval):
@@ -120,13 +123,33 @@ def prueba(cv):
     for fig in range(1,17):
         plt.subplot(4,4,fig)
         yield from cv.sleep(Q_(.5, 's'))
-        print('Mandando pulso...', end='')
-        sys.stdout.flush()
+        print('Mandando pulso...', end='', flush=True)
         subida, bajada = yield from cv.pulso()
         print('listo')
         plt.plot(subida[1], label='Subida')
         plt.plot(bajada[1], label='Bajada')
         plt.legend()
+    plt.savefig('cv.png')
+
+@asyncio.coroutine
+def prueba2(cv):
+    cv.setAncho(Q_(.1, 's'))
+    yield from cv.configurar()
+    yield from cv.gen.update_async(enable=True)
+    yield from cv.osc.stop_async()
+    yield from cv.osc.run_async()
+    from matplotlib import pyplot as plt
+    plt.figure(figsize=(9,9))
+    plots = 4
+    filas = int(np.round(np.sqrt(plots)))
+    columnas = int(np.ceil(plots / filas))
+    for fig in range(1, plots + 1):
+        plt.subplot(filas, columnas, fig)
+        yield from cv.sleep(Q_(.5, 's'))
+        print('Mandando pulso...', end='', flush=True)
+        pulso = yield from cv.pulso()
+        print('listo')
+        plt.plot(pulso[1])
     plt.savefig('cv.png')
 
 if __name__ == '__main__':
@@ -145,5 +168,5 @@ if __name__ == '__main__':
     osc = GwinstekGDS2062('ASRL5::INSTR')
     initialize_many([gen, osc])
     cv = CV_Pulsada(gen, osc)
-    fut = asyncio.async(prueba(cv))
+    fut = asyncio.async(prueba2(cv))
     asyncio.get_event_loop().run_until_complete(fut)
