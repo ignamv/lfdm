@@ -15,16 +15,32 @@ class CV_Pulsada(object):
         self.gen.refresh()
         self.osc = osciloscopio
         self.osc.refresh()
-        self.setAncho(Q_(1., 's'))
         self.epsilon = .05
 
+    @asyncio.coroutine
     def setAncho(self, ancho):
         self._ancho = ancho
+        leading, trailing = yield from self.gen.refresh_async(
+                ['leading_edge', 'trailing_edge'])
         if ancho < Q_(950, 'ms'):
-            self.gen.update(width = ancho)
+            # Sin RUN actualiza el zoom en vez de la escala de adquisición
+            yield from self.osc.run_async()
+            yield from self.osc.update_async(delay = .5 * ancho, time_scale = 
+                    self.osc.fit_time(ancho + .5 * (leading + trailing)))
+            yield from self.osc.stop_async()
+            yield from self.gen.update_async(width = ancho,
+                    trigger_mode = 'trigger')
             self.manual = False
         else:
-            self.manual = True
+            if not self.manual:
+                yield from self.gen.update_async(
+                        trigger_mode = 'external_width')
+                # Sin RUN actualiza el zoom en vez de la escala de adquisición
+                yield from self.osc.run_async()
+                yield from self.osc.update_async(delay=Q_(0, 's',
+                    time_scale = self.osc.fit_time(leading)))
+                yield from self.osc.stop_async()
+                self.manual = True
 
     def ancho(self):
         return self._ancho
@@ -49,30 +65,23 @@ class CV_Pulsada(object):
         avg = high + low
         span = 2. * (high - low)
         yield from self.gen.update_async(trigger_control = 'negative')
-        yield from self.osc.fit_time_async(leading)
-        yield from self.osc.fit_voltage_async(span, 1)
-        yield from self.osc.update_async(trigger_mode='single')
-        yield from self.osc.stop_async()
         yield from self.osc.run_async()
-        yield from self.osc.update_async(trigger_level = Q_(0, 'V'),
-                trigger_slope='falling', trigger_source=1, 
+        yield from self.osc.update_async(trigger_mode='single',
+                trigger_level = avg,
+                trigger_slope='rising', trigger_source=1, 
                 trigger_couple='dc', trigger_type='edge', 
-                delay=Q_(0, 's'), record_length=1,
+                record_length=1, voltage_scale={1: self.osc.fit_voltage(span)},
                 offset={1: -avg})
-        yield from self.osc.save_setup_async(self.SETUP_BAJADA)
-        yield from self.osc.update_async(trigger_slope='rising')
-        yield from self.osc.save_setup_async(self.SETUP_SUBIDA)
+        yield from self.osc.stop_async()
         yield from self.sleep(Q_(0.1, 's'))
-
-
 
     @asyncio.coroutine
     def pulso_manual(self):
+        yield from self.osc.run_async()
         leading = self.gen.recall('leading_edge')
         trailing = self.gen.recall('trailing_edge')
         #yield from self.osc.recall_setup_async(self.SETUP_SUBIDA)
         # Evito glitches configurando en este orden
-        yield from self.gen.update_async(trigger_mode = 'external_width')
         beginning = time.time()
         yield from self.gen.update_async(trigger_control = 'positive')
         yield from self.sleep(self.osc.xdivisions *
@@ -90,23 +99,21 @@ class CV_Pulsada(object):
                 self.osc.recall('time_scale') + Q_(0, 'ms'))
         bajada = yield from self.osc.acquire_async([1])
         yield from self.osc.update_async(trigger_slope='rising')
-        yield from self.osc.run_async()
         subida = self.osc.process_data(subida_raw)
         return (subida, bajada)
 
     @asyncio.coroutine
     def pulso_normal(self):
+        yield from self.osc.run_async()
         # Para no pedirlo en medio del pulso
         leading, trailing, width = yield from self.gen.refresh_async(
                 ['leading_edge', 'trailing_edge', 'width'])
-        yield from self.osc.fit_time_async(width + .5 * (leading + trailing))
-        yield from self.osc.update_async(delay = .5 * width)
-        yield from self.gen.update_async(trigger_mode = 'trigger')
+        yield from self.sleep(.5 * self.osc.recall('time_scale') *
+                self.osc.xdivisions - self.osc.recall('delay') + Q_(200, 'ms'))
         yield from self.gen.trigger_async()
         yield from self.sleep(self.osc.xdivisions *
                 self.osc.recall('time_scale'))
         pulso = yield from self.osc.acquire_async([1])
-        yield from self.osc.run_async()
         return pulso
 
     @asyncio.coroutine
@@ -115,7 +122,7 @@ class CV_Pulsada(object):
 
 @asyncio.coroutine
 def prueba(cv):
-    cv.setAncho(Q_(1, 's'))
+    yield from cv.setAncho(Q_(1, 's'))
     yield from cv.configurar()
     yield from cv.gen.update_async(enable=True)
     from matplotlib import pyplot as plt
@@ -133,14 +140,12 @@ def prueba(cv):
 
 @asyncio.coroutine
 def prueba2(cv):
-    cv.setAncho(Q_(.1, 's'))
     yield from cv.configurar()
+    yield from cv.setAncho(Q_(.1, 's'))
     yield from cv.gen.update_async(enable=True)
-    yield from cv.osc.stop_async()
-    yield from cv.osc.run_async()
     from matplotlib import pyplot as plt
     plt.figure(figsize=(9,9))
-    plots = 4
+    plots = 25
     filas = int(np.round(np.sqrt(plots)))
     columnas = int(np.ceil(plots / filas))
     for fig in range(1, plots + 1):
