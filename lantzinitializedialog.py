@@ -1,6 +1,6 @@
 import asyncio
-from PyQt4.QtGui import QDialog, QTableWidget, QVBoxLayout, QTableWidgetItem
-from PyQt4.QtCore import Qt, pyqtSignal
+from PyQt4.QtGui import QDialog, QTableWidget, QVBoxLayout, QTableWidgetItem, QPushButton
+from PyQt4.QtCore import Qt, pyqtSignal, pyqtSlot
 import taskwrap
 import logging
 
@@ -25,11 +25,20 @@ class LantzInitializeDialog(QDialog):
             self.table.setItem(ii, 0, QTableWidgetItem(inst.name))
             self.table.setItem(ii, 1, QTableWidgetItem('Pending...'))
 
+        cancel = QPushButton('Cancel')
+        cancel.clicked.connect(self.cancel)
+
         self.table.setHorizontalHeaderLabels(["Name", "Status"])
         self.table.verticalHeader().setVisible(False)
         self.table.resizeColumnToContents(0)
         self.layout().addWidget(self.table)
+        self.layout().addWidget(cancel)
         self.initialize_all()
+
+    @pyqtSlot()
+    def cancel(self):
+        for fut in self.futures:
+            fut.cancel()
 
     @asyncio.coroutine
     def initialize_instrument(self, instrument):
@@ -50,9 +59,9 @@ class LantzInitializeDialog(QDialog):
 
     @taskwrap.taskwrap
     def initialize_all(self):
-        futures = [asyncio.async(self.initialize_instrument(inst)) 
+        self.futures = [asyncio.async(self.initialize_instrument(inst)) 
                     for inst in self.instruments]
-        results = yield from asyncio.gather(*futures)
+        results = yield from asyncio.gather(*self.futures)
         if all(results):
             self.finished.emit(True)
             self.close()
