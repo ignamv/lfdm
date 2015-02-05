@@ -45,16 +45,13 @@ class VI_GUI(base):
         self.ui.setupUi(self)
         # Set up grafico
         self.plot = tipiplot.TipiPlot(self)
-        self.axes = self.figure.add_axes((.1,.1,.85,.85), xscale='log',
-                yscale='log')
         self.plot.axes.set_xlim((1e-10, 1e-2))
         self.plot.axes.set_ylim((1e-6, 1e1))
-        self.axes.hold(True)
-        self.canvas = FigureCanvasQTAgg(self.figure)
-        self.canvas.setMinimumSize(320, 240)
-        self.ui.layout_grafico.addWidget(self.canvas)
-        self.ui.layout_grafico.addWidget(NavigationToolbar2QT(self.canvas,
-            self))
+        self.ui.layout_grafico.addWidget(self.plot)
+        self.ui.xlog.toggled.connect(self.plot.setLogscaleX)
+        self.ui.xlog.toggled.connect(self.plot.draw)
+        self.ui.ylog.toggled.connect(self.plot.setLogscaleY)
+        self.ui.ylog.toggled.connect(self.plot.draw)
         # Conectar a instrumentos
         self.i_src = Keithley220('GPIB0::12::INSTR')
         self.electrometro = Keithley617('GPIB0::28::INSTR')
@@ -63,14 +60,12 @@ class VI_GUI(base):
         init = LantzInitializeDialog(self.instruments, parent=self)
         init.finished.connect(self.on_init_finished)
         init.show()
-        self.setEnabled(False)
 
     @pyqtSlot(bool)
     def on_init_finished(self, success):
         self.simulate = not success
         logger.debug("Initialization finished: %s", str(success))
         self.setMidiendo(False)
-        self.setEnabled(True)
         SaveSettings(self.savesettings, self)
 
     def closeEvent(self, event):
@@ -90,20 +85,6 @@ class VI_GUI(base):
     @pyqtSlot(bool)
     def on_geometrico_toggled(self, state):
         self.ui.puntos_por_decada.setEnabled(state)
-
-    escalas = ['linear', 'log']
-    @pyqtSlot(bool)
-    def on_xlog_toggled(self, state):
-        self.plot.axes.set_xscale(self.escalas[state])
-        self.plot.canvas.draw()
-    @pyqtSlot(bool)
-    def on_ylog_toggled(self, state):
-        self.axes.set_yscale(self.escalas[state])
-        self.canvas.draw()
-
-    class Estado(Enum):
-        idle = 0
-        correr = 1
 
     @asyncio.coroutine
     def medir(self):
@@ -127,9 +108,9 @@ class VI_GUI(base):
             logger.debug('Tensión: %s (%d mediciones)',
                     '{:.3e~}'.format(tension), nn)
             self.tensiones[ii] = tension
-            self.plot.set_xdata(self.corrientes[:ii].magnitude)
-            self.plot.set_ydata(self.tensiones[:ii].magnitude)
-            self.canvas.draw()
+            self.lines.set_xdata(self.corrientes[:ii].magnitude)
+            self.lines.set_ydata(self.tensiones[:ii].magnitude)
+            self.plot.canvas.draw()
 
     @asyncio.coroutine
     def terminar(self):
@@ -144,6 +125,22 @@ class VI_GUI(base):
         self.midiendo = midiendo
         self.ui.parametros.setEnabled(not midiendo)
         self.ui.terminar.setEnabled(midiendo)
+
+    @asyncio.coroutine
+    def simular(self):
+        self.tensiones = (self.corrientes * Q_(1,'kohm')).to('V')
+        for ii, corriente in enumerate(self.corrientes):
+            yield from asyncio.sleep(.2)
+            logger.debug('Corriente %03d/%03d: %s', ii + 1,
+                    len(self.corrientes), '{:.3e~}'.format(corriente))
+            yield from asyncio.sleep(.2)
+            tension = (corriente * Q_(1, 'kohm')).to('V')
+            logger.debug('Tensión: %s (%d mediciones)',
+                    '{:.3e~}'.format(tension), 0)
+            self.tensiones[ii] = tension
+            self.lines.set_xdata(self.corrientes[:ii].magnitude)
+            self.lines.set_ydata(self.tensiones[:ii].magnitude)
+            self.plot.canvas.draw()
 
     @pyqtSlot()
     @taskwrap.taskwrap
@@ -164,7 +161,7 @@ class VI_GUI(base):
                 1.5 / puntos_por_decada, 1. / puntos_por_decada)), 'A')
         logger.debug('Voy a medir corrientes %s', self.corrientes)
         self.tensiones = Q_(np.empty(len(self.corrientes)), 'V')
-        self.plot, = self.plot.axes.plot([], [], 'x', label='Hola')
+        self.lines, = self.plot.axes.plot([], [], 'x', label='Hola')
         if not self.simulate:
             try:
                 yield from self.medir()
@@ -173,7 +170,7 @@ class VI_GUI(base):
             finally:
                 yield from self.terminar()
         else:
-            self.tensiones = (self.corrientes * Q_(1,'kohm')).to('V')
+            yield from self.simular()
         filename = get_save_filename(self, caption='Guardar medición',
                 filter='*.txt;;*.*')
         if filename == '':
@@ -185,6 +182,13 @@ class VI_GUI(base):
             fd.write('# Incremento: {:e}A\n'.format(incremento))
         else:
             fd.write('# {} puntos por decada\n'.format(puntos_por_decada))
+        if self.simulate:
+            fd.write('# Simulado con resistencia de 1kOhm\n')
+        else:
+            tmp = yield from self.electrometro.refresh_async('status')
+            fd.write('# Electrómetro: ' + tmp + '\n')
+            tmp = yield from self.i_src.refresh_async('status')
+            fd.write('# Fuente de corriente: ' + tmp + '\n')
         fd.write('# Corriente[A]\tTension[V]\n')
         for ii in range(len(self.corrientes)):
             fd.write('{:e}\t{:e}\n'.format(self.corrientes[ii].magnitude,
