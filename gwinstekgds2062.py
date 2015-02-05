@@ -78,16 +78,14 @@ class GwinstekGDS2062(MessageVisaDriver):
         for ii in range(-9, 2)))[:-2], 's')
     time_scale = MyFeat(':timebase:scale', 'nr3', units='s')
     
-    @Action()
     def fit_time(self, time):
         """Find smallest time scale that fits time in one acquisition"""
-        self.time_scale = next(tt for tt in self.time_scales 
+        return next(tt for tt in self.time_scales 
                 if tt * self.xdivisions >= time)
 
-    @Action()
-    def fit_voltage(self, voltage, channel):
+    def fit_voltage(self, voltage):
         """Find smallest time scale that fits time in one acquisition"""
-        self.voltage_scale[channel] = next(vv for vv in self.voltage_scales 
+        return next(vv for vv in self.voltage_scales 
                 if vv * self.ydivisions >= voltage)
 
     @Action()
