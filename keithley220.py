@@ -16,7 +16,7 @@ class Keithley220 (GPIBVisaDriver):
 
     @Feat()
     def status(self):
-        return self.query('U0X')
+        return '220' + self.query('U0X')
 
     @Feat(values={True: 1, False: 0})
     def output(self):
@@ -68,9 +68,6 @@ if __name__ == '__main__':
     log_to_screen(DEBUG)
     inst = Keithley220('GPIB0::12::INSTR')
     inst.initialize()
-    print(inst.output)
-    print(inst.range)
-    print(inst.current)
-    print(inst.voltage_limit)
+    print(repr(inst.status))
     inst.finalize()
 
