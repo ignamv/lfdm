@@ -19,29 +19,20 @@ class TipiPlot(QtGui.QWidget):
                 NavigationToolbar2QT(self.canvas, self))
 
     scales = ['linear', 'log']
-    @QtCore.pyqtProperty(bool)
     def logscaleX(self):
         return self.axes.get_xscale() == self.scales[1]
 
-    @logscaleX.setter
-    def logscaleX(self, value):
+    @QtCore.pyqtSlot(bool)
+    def setLogscaleX(self, value):
         self.axes.set_xscale(self.scales[value])
 
-    @QtCore.pyqtSlot(bool)
-    def setLogscaleX(self, value)
-        self.logscaleX = value
-
-    @QtCore.pyqtProperty(bool)
     def logscaleY(self):
         return self.axes.get_yscale() == self.scales[1]
 
-    @logscaleY.setter
-    def logscaleY(self, value):
-        self.axes.set_yscale(self.scales[value])
-
     @QtCore.pyqtSlot(bool)
-    def setLogscaleY(self, value)
-        self.logscaleY = value
+    def setLogscaleY(self, value):
+        print('logy {}'.format(value))
+        self.axes.set_yscale(self.scales[value])
 
     @QtCore.pyqtSlot()
     def draw(self):
