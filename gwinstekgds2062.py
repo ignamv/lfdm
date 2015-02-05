@@ -57,17 +57,17 @@ class GwinstekGDS2062(MessageVisaDriver):
             values=dict(ac=0, dc=1, ground=2))
     display = MyChanFeat(':channel{}:display', 'nr1', 
             values={True: 1, False: 0})
-    invert = MyChanFeat(':channel{}:invert', 'nr1', 
+    invert = MyChanFeat(':chan{}:inv', 'nr1', 
             values={True: 1, False: 0})
     offset = MyChanFeat(':channel{}:offset', 'nr3', units='V')
     voltage_scales = Q_(np.concatenate(tuple(np.array([1., 2., 5.]) * 10**ii
         for ii in range(-3, 1)))[1:], 'V')
     voltage_scale = MyChanFeat(':channel{}:scale', 'nr3', units='V')
-    trigger_level = MyFeat(':trigger:level', 'nr3', units='V')
+    trigger_level = MyFeat(':trig:lev', 'nr3', units='V')
     trigger_mode = MyFeat(':trigger:mode', 'nr1', values=dict(auto_level=0, 
         auto=1, normal=2, single=3))
     trigger_couple = MyFeat(':trigger:couple', 'nr1', values=dict(ac=0, dc=1))
-    trigger_slope = MyFeat(':trigger:slope', 'nr1', values=dict(rising=0,
+    trigger_slope = MyFeat(':trig:slop', 'nr1', values=dict(rising=0,
         falling=1))
     trigger_source = MyFeat(':trigger:source', 'nr1', values={1: 0, 2: 1, 3: 2,
         4: 3, 'external': 4, 'line': 5})
@@ -78,6 +78,17 @@ class GwinstekGDS2062(MessageVisaDriver):
         for ii in range(-9, 2)))[:-2], 's')
     time_scale = MyFeat(':timebase:scale', 'nr3', units='s')
     
+    @Action()
+    def fit_time(self, time):
+        """Find smallest time scale that fits time in one acquisition"""
+        self.time_scale = next(tt for tt in self.time_scales 
+                if tt * self.xdivisions >= time)
+
+    @Action()
+    def fit_voltage(self, voltage, channel):
+        """Find smallest time scale that fits time in one acquisition"""
+        self.voltage_scale[channel] = next(vv for vv in self.voltage_scales 
+                if vv * self.ydivisions >= voltage)
 
     @Action()
     def run(self):
