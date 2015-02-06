@@ -64,6 +64,8 @@ class VI_GUI(base):
     @pyqtSlot(bool)
     def on_init_finished(self, success):
         self.simulate = not success
+        if not self.simulate:
+            self.matriz.reset()
         logger.debug("Initialization finished: %s", str(success))
         self.setMidiendo(False)
         SaveSettings(self.savesettings, self)
@@ -73,8 +75,7 @@ class VI_GUI(base):
         if self.midiendo:
             event.ignore()
             return
-        init = LantzInitializeDialog(self.instruments, parent=self,
-                finalize=True)
+        init = LantzInitializeDialog(self.instruments, finalize=True)
         init.show()
         return super().closeEvent(event)
 
@@ -165,6 +166,7 @@ class VI_GUI(base):
         if not self.simulate:
             try:
                 yield from self.medir()
+                self.canales = yield from self.matriz.refresh_async('channel')
             except Exception as e:
                 logger.error(''.join(traceback.format_exception(*sys.exc_info())))
             finally:
@@ -189,6 +191,10 @@ class VI_GUI(base):
             fd.write('# Electrómetro: ' + tmp + '\n')
             tmp = yield from self.i_src.refresh_async('status')
             fd.write('# Fuente de corriente: ' + tmp + '\n')
+            tmp = yield from self.matriz.refresh_async('status')
+            fd.write('# Matriz : ' + tmp + '\n')
+            fd.write('# Canales : ' + ''.join(str(k) for k,v in self.canales)
+                if v) + '\n')
         fd.write('# Corriente[A]\tTension[V]\n')
         for ii in range(len(self.corrientes)):
             fd.write('{:e}\t{:e}\n'.format(self.corrientes[ii].magnitude,
