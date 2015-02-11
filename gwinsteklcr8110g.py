@@ -1,5 +1,6 @@
-from lantz import Feat, Q_
+from lantz import Feat, Q_, Action
 from lantz.serial import SerialDriver
+import numpy as np
 
 class GwinstekLCR8110G (SerialDriver):
     ENCODING = 'ascii'
@@ -41,12 +42,14 @@ class GwinstekLCR8110G (SerialDriver):
         first, second = map(float, self.query(':meas:trig').split(","))
         return (first, second)
 
+    @Action()
     def measure_stable(self, epsilon=1e-2):
         meas2 = self.measure
         while True:
             meas1 = meas2
             meas2 = self.measure
-            if abs((meas1[0]-meas2[0])/meas2[0]) < epsilon:
+            if np.linalg.norm(np.subtract(meas2, meas1)) / np.linalg.norm(
+                    meas2) < epsilon:
                 return meas2
 
         
