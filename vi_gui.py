@@ -29,16 +29,6 @@ logger = logging.getLogger(__name__)
 form, base = loadUiType('vi.ui')
 
 class VI_GUI(base):
-    savesettings = [
-            ('corriente_inicial', 'text'),
-            ('corriente_final', 'text'),
-            ('incremento', 'text'),
-            ('puntos_por_decada', 'text'),
-            ('lineal', 'checked'),
-            ('geometrico', 'checked'),
-            ('xlog', 'checked'),
-            ('ylog', 'checked'),
-            ]
     def __init__(self, parent=None):
         super().__init__(parent)
         self.ui = form()
@@ -68,9 +58,19 @@ class VI_GUI(base):
             self.matriz.reset()
         logger.debug("Initialization finished: %s", str(success))
         self.setMidiendo(False)
-        SaveSettings(self.savesettings, self)
+        self.savesettings = SaveSettings([
+            ('corriente_inicial', 'text'),
+            ('corriente_final', 'text'),
+            ('incremento', 'text'),
+            ('puntos_por_decada', 'text'),
+            ('lineal', 'checked'),
+            ('geometrico', 'checked'),
+            ('xlog', 'checked'),
+            ('ylog', 'checked'),
+            ], self)
 
     def closeEvent(self, event):
+        self.savesettings.save()
         # TODO: interrupt measurement
         if self.midiendo:
             event.ignore()
@@ -90,13 +90,14 @@ class VI_GUI(base):
     @asyncio.coroutine
     def medir(self):
         self.setMidiendo(True)
+        yield from self.matriz.matrix_mode_async()
         yield from self.matriz.close_async((2, 1))
         yield from self.matriz.close_async((4, 3))
         yield from self.electrometro.update_async(zero_check = False,
                 zero_correct = False)
         yield from self.i_src.update_async(
             current=self.corrientes[0],
-            voltage_limit = Q_(5, 'V'),
+            voltage_limit = Q_(10, 'V'),
             output = True)
         # Stabilize output
         yield from asyncio.sleep(.5)
@@ -193,7 +194,7 @@ class VI_GUI(base):
             fd.write('# Fuente de corriente: ' + tmp + '\n')
             tmp = yield from self.matriz.refresh_async('status')
             fd.write('# Matriz : ' + tmp + '\n')
-            fd.write('# Canales : ' + ''.join(str(k) for k,v in self.canales)
+            fd.write('# Canales : ' + ''.join(str(k) for k,v in self.canales
                 if v) + '\n')
         fd.write('# Corriente[A]\tTension[V]\n')
         for ii in range(len(self.corrientes)):
