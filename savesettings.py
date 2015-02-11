@@ -10,7 +10,7 @@ class SaveSettings(QObject):
             if qset.contains(string):
                 parent.findChild(QObject, child).setProperty(property,
                         qset.value(string))
-    def __del__(self):
+    def save(self):
         qset = QSettings()
         for child, property in self.properties:
             qset.setValue(child + '/' + property,
