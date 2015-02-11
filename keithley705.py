@@ -6,7 +6,7 @@ rows = list(range(1,5))
 class Keithley705 (GPIBVisaDriver):
     @Action()
     def matrix_mode(self):
-        self.send('A0')
+        self.send('A0X')
 
     columns = columns
     rows = rows
