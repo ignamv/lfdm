@@ -1,6 +1,7 @@
 # encoding: utf-8
 from lantz import Q_
 import numpy as np
+import sys
 from time import sleep
 from datetime import datetime
 
@@ -9,8 +10,8 @@ from gwinsteklcr8110g import GwinstekLCR8110G
 from hp4277a import HP4277A
 
 # Me conecto a los instrumentos
-scanner = Keithley705('GPIB0::29::INSTR')
-scanner.initialize()
+matriz = Keithley705('GPIB0::29::INSTR')
+matriz.initialize()
 
 lcr = GwinstekLCR8110G(port=0, timeout=5)
 lcr.initialize()
@@ -19,40 +20,42 @@ bias_source = HP4277A('GPIB0::17::INSTR')
 bias_source.initialize()
 
 # Configuro la matriz
-scanner.matrix_mode()
-scanner.reset()
+matriz.matrix_mode()
+matriz.reset()
 conexiones = [(3, 2),
               (3, 3),
               (5, 1)]
-for columna, fila in conexiones:
-    scanner.close_channel(columna, fila)
-scanner.execute()
+for canal in conexiones:
+    matriz.close(canal)
+matriz.execute()
 
 # Configuro el LCR
 lcr.equivalent_circuit = 'parallel'
 lcr.frequency = Q_(1, 'MHz')
 lcr.drive_level = Q_(100, 'mV')
 
-salida = open('mediciones\{}.txt'.format(datetime.today().strftime(
-    '%Y-%m-%d_%H.%M.%S')), 'w')
-salida.write('# Bias [V]\tC [F]\tRpar [Ohm]\n')
-voltajes = Q_(np.linspace(-5, 10, 60), 'V')
+archivo = r'..\mediciones\{}.txt'.format(datetime.today().strftime(
+    '%Y-%m-%d_%H.%M.%S'))
+salida = open(archivo, 'w', encoding='utf-8')
+print('Escribiendo a ' + archivo)
+salida.write('# {}\n'.format(' '.join(sys.argv)))
+salida.write('# Bias: ' + bias_source.learn_raw + '\n')
+salida.write('# Bias: ' + bias_source.learn_raw + '\n')
+salida.write('# LCR: {} {} {}\n'.format(lcr.recall('equivalent_circuit'),
+    lcr.recall('frequency'), lcr.recall('drive_level')))
+salida.write('# Matriz: {}\n'.format(matriz.status))
+tensiones = Q_(np.linspace(-3, 1, 40), 'V')
 
-bias_source.bias_voltage(voltajes[0])
+salida.write('# Tensión [V]\tC [F]\tR [ohm]\n')
+bias_source.bias_voltage = tensiones[0]
 sleep(1)
-intentos = 20
-for bias in voltajes:
-    bias_source.bias_voltage(bias)
-    c, r = lcr.measure
-    for ii in range(intentos):
-        c2, r2 = lcr.measure
-        if ((c2 - c) / min(c, c2)).to("").magnitude < 1e-2:
-            break
-        c, r = c2, r2
-        if ii == intentos - 1:
-            raise Exception("Medición no converge")
-    r = .5 * (r + r2)
-    c = .5 * (c + c2)
-    print(ii)
+for ii, bias in enumerate(tensiones):
+    print('{}/{}'.format(ii + 1, len(tensiones)), end='', flush=True)
+    bias_source.bias_voltage = bias
+    c, r = lcr.measure_stable(.05)
     salida.write('{}\t{}\t{}\n'.format(
-        bias.magnitude, c.magnitude, r.magnitude))
+        bias.magnitude, c, r))
+    print('')
+bias_source.bias_voltage = Q_(0, 'V')
+
+matriz.reset()
