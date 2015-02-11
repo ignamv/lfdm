@@ -7,12 +7,6 @@ from time import sleep, time
 import pyvisa.constants
 import re
 
-def SetterFeat(*args, **kwargs):
-    feat = Feat(*args, **kwargs)
-    def inner(function):
-        return feat.setter(function)
-    return inner
-
 def HP8112ADictFeat(command, values):
     def setter(self, value):
         self.send(command + value)
@@ -72,7 +66,7 @@ class HP8112A (GPIBVisaDriver):
         return self.query('CST')
 
     @Feat(values=dict(normal='1', trigger='2', gate='3', external_width='4', 
-        external_burst='5'))
+        external_burst='5'), read_once=True)
     def trigger_mode(self):
         return re.match(r' *M([1-5]),', self.settings).group(1)
 
@@ -80,7 +74,8 @@ class HP8112A (GPIBVisaDriver):
     def trigger_mode(self, value):
         self.send('M' + value)
 
-    @Feat(values=dict(off='0', positive='1', negative='2', both='3'))
+    @Feat(values=dict(off='0', positive='1', negative='2', both='3'),
+            read_once=True)
     def trigger_control(self):
         return re.search(r',T([0-3]),', self.settings).group(1)
 
@@ -88,7 +83,7 @@ class HP8112A (GPIBVisaDriver):
     def trigger_control(self, value):
         self.send('T' + value)
 
-    @Feat(values={True: '1', False: '0'})
+    @Feat(values={True: '1', False: '0'}, read_once=True)
     def complement(self):
         return re.search(r'.*,C([01]),', self.settings).group(1)
 
@@ -96,7 +91,7 @@ class HP8112A (GPIBVisaDriver):
     def complement(self, value):
         self.send('C' + value)
 
-    @Feat(values={True: '0', False: '1'})
+    @Feat(values={True: '0', False: '1'}, read_once=True)
     def enable(self):
         return re.search(r'.*,D([01]),', self.settings).group(1)
 
