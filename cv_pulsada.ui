@@ -6,57 +6,148 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>333</width>
+    <height>387</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>CV Pulsada</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QGroupBox" name="groupBox">
+    <widget class="QGroupBox" name="parametros_generador">
      <property name="title">
       <string>Parámetros generador</string>
      </property>
-     <layout class="QFormLayout" name="formLayout">
-      <item row="0" column="0">
+     <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="0" colspan="2">
+       <widget class="QLabel" name="label_8">
+        <property name="text">
+         <string>Tensión que va a ver el dispositivo</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="high">
+        <property name="text">
+         <string>3V</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
          <string>Tensión máxima</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="high"/>
-      </item>
-      <item row="1" column="0">
+      <item row="2" column="0">
        <widget class="QLabel" name="label_2">
         <property name="text">
          <string>Tensión mínima</string>
         </property>
        </widget>
       </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="low"/>
-      </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_3">
+      <item row="2" column="1">
+       <widget class="QLineEdit" name="low">
         <property name="text">
-         <string>Ancho</string>
+         <string>-1V</string>
         </property>
        </widget>
       </item>
-      <item row="2" column="1">
-       <widget class="QLineEdit" name="ancho"/>
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>Rise time</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QLineEdit" name="rise">
+        <property name="text">
+         <string>100us</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Fall time</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QLineEdit" name="fall">
+        <property name="text">
+         <string>100us</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="0" colspan="2">
+       <widget class="QPushButton" name="config_gen">
+        <property name="text">
+         <string>Aplicar</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="pulso">
+    <widget class="QGroupBox" name="groupBox">
+     <property name="title">
+      <string>Barrido de tiempo</string>
+     </property>
+     <layout class="QFormLayout" name="formLayout_2">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_6">
+        <property name="text">
+         <string>Ancho inicial</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="inicial">
+        <property name="text">
+         <string>200us</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>Ancho final</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="tfinal">
+        <property name="text">
+         <string>200ms</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_7">
+        <property name="text">
+         <string>Puntos por década</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLineEdit" name="puntos_por_decada">
+        <property name="text">
+         <string>5</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="barrer">
      <property name="text">
-      <string>Pulso</string>
+      <string>Barrer</string>
      </property>
     </widget>
    </item>

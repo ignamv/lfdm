@@ -18,29 +18,36 @@ class CV_Pulsada(object):
         self.epsilon = .05
 
     @asyncio.coroutine
-    def setAncho(self, ancho):
-        self._ancho = ancho
+    def setAncho(self, ancho, capturar_subida=True, capturar_bajada=True):
+        if not (capturar_subida or capturar_bajada):
+            raise Exception('No se pidió un flanco para capturar')
         leading, trailing = yield from self.gen.refresh_async(
                 ['leading_edge', 'trailing_edge'])
-        if ancho < Q_(950, 'ms'):
-            # Sin RUN actualiza el zoom en vez de la escala de adquisición
-            yield from self.osc.run_async()
-            yield from self.osc.update_async(delay = .5 * ancho, time_scale = 
-                    self.osc.fit_time(ancho + .5 * (leading + trailing)))
-            yield from self.osc.stop_async()
+        self.manual = ancho > Q_(950, 'ms')
+        if self.manual:
+            yield from self.gen.update_async(trigger_mode = 'external_width')
+        else:
             yield from self.gen.update_async(width = ancho,
                     trigger_mode = 'trigger')
-            self.manual = False
+        settings = None
+        if capturar_subida and capturar_bajada:
+            # Configurar osciloscopio para capturar todo
+            # Sin RUN actualiza el zoom en vez de la escala de adquisición
+            settings = dict(delay = .5 * ancho, time_scale = 
+                    self.osc.fit_time(ancho + .5 * (leading + trailing)))
         else:
-            if not self.manual:
-                yield from self.gen.update_async(
-                        trigger_mode = 'external_width')
-                # Sin RUN actualiza el zoom en vez de la escala de adquisición
-                yield from self.osc.run_async()
-                yield from self.osc.update_async(delay=Q_(0, 's',
-                    time_scale = self.osc.fit_time(leading)))
-                yield from self.osc.stop_async()
-                self.manual = True
+            settings = dict(delay=Q_(0, 's'),
+                    time_scale = self.osc.fit_time(leading))
+            if capturar_subida:
+                settings['trigger_slope'] = 'rising'
+            else:
+                settings['trigger_slope'] = 'falling'
+        # Sin RUN actualiza el zoom en vez de la escala de adquisición
+        yield from self.osc.run_async()
+        yield from self.osc.update_async(settings)
+        self._ancho = ancho
+        self.capturar_bajada = capturar_bajada
+        self.capturar_subida = capturar_subida
 
     def ancho(self):
         return self._ancho
@@ -77,7 +84,6 @@ class CV_Pulsada(object):
 
     @asyncio.coroutine
     def pulso_manual(self):
-        yield from self.osc.run_async()
         leading = self.gen.recall('leading_edge')
         trailing = self.gen.recall('trailing_edge')
         #yield from self.osc.recall_setup_async(self.SETUP_SUBIDA)
@@ -104,7 +110,6 @@ class CV_Pulsada(object):
 
     @asyncio.coroutine
     def pulso_normal(self):
-        yield from self.osc.run_async()
         # Para no pedirlo en medio del pulso
         leading, trailing, width = yield from self.gen.refresh_async(
                 ['leading_edge', 'trailing_edge', 'width'])
@@ -114,7 +119,7 @@ class CV_Pulsada(object):
         yield from self.sleep(self.osc.xdivisions *
                 self.osc.recall('time_scale'))
         pulso = yield from self.osc.acquire_async([1])
-        return pulso
+        return (pulso,)
 
     @asyncio.coroutine
     def sleep(self, interval):
@@ -145,7 +150,7 @@ def prueba2(cv):
     yield from cv.gen.update_async(enable=True)
     from matplotlib import pyplot as plt
     plt.figure(figsize=(9,9))
-    plots = 25
+    plots = 8
     filas = int(np.round(np.sqrt(plots)))
     columnas = int(np.ceil(plots / filas))
     for fig in range(1, plots + 1):
@@ -154,9 +159,32 @@ def prueba2(cv):
         print('Mandando pulso...', end='', flush=True)
         pulso = yield from cv.pulso()
         print('listo')
-        plt.plot(pulso[1])
+        plt.plot(pulso[0][1])
     plt.savefig('cv.png')
 
+@asyncio.coroutine
+def prueba3(cv):
+    yield from cv.configurar()
+    yield from cv.gen.update_async(enable=True)
+    from matplotlib import pyplot as plt
+    plt.figure(figsize=(9,9))
+    plots = 16
+    filas = int(np.round(np.sqrt(plots)))
+    columnas = int(np.ceil(plots / filas))
+    yield from cv.setAncho(Q_(.1, 's'))
+    for ii, tt in enumerate(np.power(10, np.linspace(np.log10(200e-6),
+                                                     np.log10(200e-3), 16))):
+        plt.subplot(filas, columnas, ii + 1)
+        print('config...', end='', flush=True)
+        capturar_bajada = ii < 6
+        yield from cv.setAncho(Q_(tt, 's'), True, capturar_bajada)
+        print('pausa...', end='', flush=True)
+        yield from cv.sleep(Q_(1, 's'))
+        print('pulso...', end='', flush=True)
+        pulso = yield from cv.pulso()
+        print('listo')
+        plt.plot(pulso[0][1])
+    plt.savefig('cv.png')
 if __name__ == '__main__':
     from hp8112a import HP8112A
     from gwinstekgds2062 import GwinstekGDS2062
@@ -173,5 +201,5 @@ if __name__ == '__main__':
     osc = GwinstekGDS2062('ASRL5::INSTR')
     initialize_many([gen, osc])
     cv = CV_Pulsada(gen, osc)
-    fut = asyncio.async(prueba2(cv))
+    fut = asyncio.async(prueba3(cv))
     asyncio.get_event_loop().run_until_complete(fut)
