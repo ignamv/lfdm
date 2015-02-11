@@ -16,7 +16,11 @@ class HP4277A (GPIBVisaDriver):
             'X([01])BI([+\-0-9.]+)EN')
     @Feat()
     def learn(self):
-        return self.learn_re.match(self.query('LN')).groups()
+        return self.learn_re.match(self.learn_raw).groups()
+
+    @Feat()
+    def learn_raw(self):
+        return self.query('LN')
 
     @Feat(units='V', limits=(-40, 40))
     def bias_voltage(self):
