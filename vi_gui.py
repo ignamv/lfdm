@@ -19,6 +19,7 @@ from qtdebug import set_trace
 from lantzinitializedialog import LantzInitializeDialog
 from savesettings import SaveSettings
 from autoincrement_file import get_save_filename
+from util import logspace, arange
 from keithley220 import Keithley220
 from keithley617 import Keithley617
 from keithley705 import Keithley705
@@ -65,6 +66,7 @@ class VI_GUI(base):
             ('puntos_por_decada', 'text'),
             ('lineal', 'checked'),
             ('geometrico', 'checked'),
+            ('invertir', 'checked'),
             ('xlog', 'checked'),
             ('ylog', 'checked'),
             ], self)
@@ -102,7 +104,10 @@ class VI_GUI(base):
         # Stabilize output
         yield from asyncio.sleep(.5)
         for ii, corriente in enumerate(self.corrientes):
-            yield from self.i_src.update_async(current=corriente)
+            if self.ui.invertir.isChecked():
+                yield from self.i_src.update_async(current=-corriente)
+            else:
+                yield from self.i_src.update_async(current=corriente)
             logger.debug('Corriente %03d/%03d: %s', ii + 1,
                     len(self.corrientes), '{:.3e~}'.format(corriente))
             tension, nn = yield from self.electrometro.stable_voltage_async(
@@ -110,8 +115,8 @@ class VI_GUI(base):
             logger.debug('Tensión: %s (%d mediciones)',
                     '{:.3e~}'.format(tension), nn)
             self.tensiones[ii] = tension
-            self.lines.set_xdata(self.corrientes[:ii].magnitude)
-            self.lines.set_ydata(self.tensiones[:ii].magnitude)
+            self.lines.set_xdata(self.corrientes[:ii+1].magnitude)
+            self.lines.set_ydata(self.tensiones[:ii+1].magnitude)
             self.plot.canvas.draw()
 
     @asyncio.coroutine
@@ -148,19 +153,16 @@ class VI_GUI(base):
     @taskwrap.taskwrap
     def on_empezar_clicked(self):
         logger.debug('Empezar')
-        corriente_inicial = Q_(self.ui.corriente_inicial.text())\
-                .to('A').magnitude
-        corriente_final = Q_(self.ui.corriente_final.text())\
-                .to('A').magnitude
+        corriente_inicial = Q_(self.ui.corriente_inicial.text()).to('A')
+        corriente_final = Q_(self.ui.corriente_final.text()).to('A')
         if self.ui.lineal.isChecked():
-            incremento = Q_(self.ui.incremento.text()).to('A').magnitude
-            self.corrientes = Q_(np.arange(corriente_inicial, corriente_final,
-                    incremento), 'A')
+            incremento = Q_(self.ui.incremento.text()).to('A')
+            self.corrientes = arange(corriente_inicial, corriente_final,
+                    incremento)
         else:
             puntos_por_decada = int(self.ui.puntos_por_decada.text())
-            self.corrientes = Q_(np.power(10, np.arange(
-                np.log10(corriente_inicial), np.log10(corriente_final) + 
-                1.5 / puntos_por_decada, 1. / puntos_por_decada)), 'A')
+            self.corrientes = logspace(corriente_inicial, corriente_final,
+                    puntos_por_decada)
         logger.debug('Voy a medir corrientes %s', self.corrientes)
         self.tensiones = Q_(np.empty(len(self.corrientes)), 'V')
         self.lines, = self.plot.axes.plot([], [], 'x', label='Hola')
@@ -179,8 +181,8 @@ class VI_GUI(base):
         if filename == '':
             return
         fd = open(filename, 'w', encoding='utf8')
-        fd.write('# Corriente inicial: {:e}A\n'.format(corriente_inicial))
-        fd.write('# Corriente final: {:e}A\n'.format(corriente_final))
+        fd.write('# Corriente inicial: {:e~}\n'.format(corriente_inicial))
+        fd.write('# Corriente final: {:e~}\n'.format(corriente_final))
         if self.ui.lineal.isChecked():
             fd.write('# Incremento: {:e}A\n'.format(incremento))
         else:

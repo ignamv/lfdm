@@ -97,6 +97,13 @@
           </property>
          </widget>
         </item>
+        <item row="4" column="0" colspan="2">
+         <widget class="QCheckBox" name="invertir">
+          <property name="text">
+           <string>Invertir polaridad</string>
+          </property>
+         </widget>
+        </item>
        </layout>
       </item>
       <item>
