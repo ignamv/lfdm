@@ -97,10 +97,17 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0" colspan="2">
-         <widget class="QCheckBox" name="invertir">
+        <item row="4" column="0">
+         <widget class="QCheckBox" name="invertir_polaridad">
           <property name="text">
            <string>Invertir polaridad</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QCheckBox" name="invertir_orden">
+          <property name="text">
+           <string>Invertir orden</string>
           </property>
          </widget>
         </item>

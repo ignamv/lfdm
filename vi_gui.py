@@ -66,7 +66,8 @@ class VI_GUI(base):
             ('puntos_por_decada', 'text'),
             ('lineal', 'checked'),
             ('geometrico', 'checked'),
-            ('invertir', 'checked'),
+            ('invertir_polaridad', 'checked'),
+            ('invertir_orden', 'checked'),
             ('xlog', 'checked'),
             ('ylog', 'checked'),
             ], self)
@@ -94,17 +95,19 @@ class VI_GUI(base):
         self.setMidiendo(True)
         yield from self.matriz.matrix_mode_async()
         yield from self.matriz.close_async((2, 1))
+        yield from self.matriz.close_async((4, 2))
         yield from self.matriz.close_async((4, 3))
+        yield from self.matriz.close_async((4, 4))
         yield from self.electrometro.update_async(zero_check = False,
                 zero_correct = False)
         yield from self.i_src.update_async(
             current=self.corrientes[0],
-            voltage_limit = Q_(10, 'V'),
+            voltage_limit = Q_(15, 'V'),
             output = True)
         # Stabilize output
         yield from asyncio.sleep(.5)
         for ii, corriente in enumerate(self.corrientes):
-            if self.ui.invertir.isChecked():
+            if self.ui.invertir_polaridad.isChecked():
                 yield from self.i_src.update_async(current=-corriente)
             else:
                 yield from self.i_src.update_async(current=corriente)
@@ -163,6 +166,8 @@ class VI_GUI(base):
             puntos_por_decada = int(self.ui.puntos_por_decada.text())
             self.corrientes = logspace(corriente_inicial, corriente_final,
                     puntos_por_decada)
+        if self.ui.invertir_orden.isChecked():
+            self.corrientes = self.corrientes[::-1]
         logger.debug('Voy a medir corrientes %s', self.corrientes)
         self.tensiones = Q_(np.empty(len(self.corrientes)), 'V')
         self.lines, = self.plot.axes.plot([], [], 'x', label='Hola')
