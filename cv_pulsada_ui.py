@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from lantzinitializedialog import LantzInitializeDialog
 from savesettings import SaveSettings
 from autoincrement_file import get_save_filename
-from logspace import logspace
+from util import logspace
 from taskwrap import taskwrap
 from cv_pulsada import CV_Pulsada
 
