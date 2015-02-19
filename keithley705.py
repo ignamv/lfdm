@@ -61,6 +61,7 @@ class Keithley705 (GPIBVisaDriver):
         super().initialize()
         # Send channel buffer state without prefix
         self.send('G3X')
+        self.matrix_mode()
 
     def finalize(self):
         self.reset()
