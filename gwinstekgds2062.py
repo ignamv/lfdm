@@ -132,9 +132,8 @@ class GwinstekGDS2062(MessageVisaDriver):
         for dd in data:
             channel = dd[4]
             deltaT = unpack('>f', dd[:4])
-            raw = np.frombuffer(dd[8:], dtype=np.int16)
-            range = np.iinfo(raw.dtype).max - np.iinfo(raw.dtype).min
-            ret[channel] = raw / range * self.voltage_scale[channel] * 10
+            raw = np.frombuffer(dd[8:], dtype='>h')
+            ret[channel] = 10. * raw / 0x100 * self.voltage_scale[channel]
         ret['time'] = Q_(deltaT * np.arange(len(raw)), 's')
         return ret
 
