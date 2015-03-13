@@ -34,6 +34,7 @@ class CV_Pulsada_UI(base):
             ('fall', 'text'),
             ('inicial', 'text'),
             ('tfinal', 'text'),
+            ('guardar_primeros', 'text'),
             ('puntos_por_decada', 'text')], self)
         init = LantzInitializeDialog(self.instrumentos, parent=self)
         init.finished.connect(self.on_init_finished)
@@ -75,9 +76,11 @@ class CV_Pulsada_UI(base):
         os.mkdir(dirname)
         yield from self.cv.configurar()
         yield from self.gen.update_async(enable=True)
+        guardar_primeros = int(self.ui.guardar_primeros.text())
         for ii, tt in enumerate(anchos):
             logger.debug('%02d / %02d: %s', ii + 1, len(anchos), str(tt))
-            yield from self.cv.setAncho(tt, True, False)
+            yield from self.cv.setAncho(tt, True, ii < guardar_primeros or 
+                    tt > self.cv.generador_max)
             yield from self.cv.sleep(Q_(1, 's'))
             pulso = yield from self.cv.pulso()
             comments = """\
@@ -89,17 +92,25 @@ Tiempo [s]\tCanal 1 [V]\n""".format(
                 self.ui.inicial.text(), self.ui.tfinal.text(),
                 self.ui.puntos_por_decada.text(), self.gen.settings, 
                 self.osc.idn, ii, tt)
-            prefijo = os.path.join(dirname, '{:03d}_{:.2e~}'.format(ii, tt))
-            tiempo = pulso[0]['time'].to('s').magnitude
-            canal1 = pulso[0][1].to('V').magnitude
-            np.savetxt(prefijo + '.txt', np.column_stack((tiempo, canal1)), 
-                    header=comments)
-            plt.figure(figsize=(9,9))
-            plt.plot(tiempo, canal1)
-            plt.xlabel('Tiempo [s]')
-            plt.ylabel('Tensión [V]')
-            plt.savefig(prefijo + '.png')
-            plt.clf()
+            for jj, flanco in enumerate(pulso):
+                prefijo = os.path.join(dirname,
+                        '{:03d}_{:.2e~}_{:d}'.format(ii, tt, jj))
+                tiempo = pulso[jj]['time'].to('s').magnitude
+                canal1 = pulso[jj][1].to('V').magnitude
+                canal2 = pulso[jj][2].to('V').magnitude
+                np.savetxt(prefijo + '.txt', np.column_stack((tiempo, canal1,
+                    canal2)), header=comments)
+                plt.figure(figsize=(18,9))
+                plt.subplot(1,2,1)
+                plt.plot(tiempo, canal1)
+                plt.xlabel('Tiempo [s]')
+                plt.ylabel('Tensión [V]')
+                plt.subplot(1,2,2)
+                plt.plot(tiempo, canal2)
+                plt.xlabel('Tiempo [s]')
+                plt.ylabel('Tensión [V]')
+                plt.savefig(prefijo + '.png')
+                plt.clf()
 
 
 if __name__ == '__main__':
