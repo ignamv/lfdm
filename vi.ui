@@ -29,35 +29,35 @@
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <item>
        <layout class="QFormLayout" name="formLayout">
-        <item row="0" column="0">
+        <item row="1" column="0">
          <widget class="QLabel" name="label">
           <property name="text">
            <string>Corriente inicial</string>
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item row="1" column="1">
          <widget class="QLineEdit" name="corriente_inicial">
           <property name="text">
            <string>2nA</string>
           </property>
          </widget>
         </item>
-        <item row="1" column="0">
+        <item row="2" column="0">
          <widget class="QLabel" name="label_2">
           <property name="text">
            <string>Corriente final</string>
           </property>
          </widget>
         </item>
-        <item row="1" column="1">
+        <item row="2" column="1">
          <widget class="QLineEdit" name="corriente_final">
           <property name="text">
            <string>2uA</string>
           </property>
          </widget>
         </item>
-        <item row="2" column="0">
+        <item row="4" column="0">
          <widget class="QRadioButton" name="lineal">
           <property name="text">
            <string>Incremento</string>
@@ -67,7 +67,7 @@
           </property>
          </widget>
         </item>
-        <item row="2" column="1">
+        <item row="4" column="1">
          <widget class="QLineEdit" name="incremento">
           <property name="enabled">
            <bool>false</bool>
@@ -77,7 +77,7 @@
           </property>
          </widget>
         </item>
-        <item row="3" column="0">
+        <item row="5" column="0">
          <widget class="QRadioButton" name="geometrico">
           <property name="text">
            <string>Puntos por década</string>
@@ -87,7 +87,7 @@
           </property>
          </widget>
         </item>
-        <item row="3" column="1">
+        <item row="5" column="1">
          <widget class="QLineEdit" name="puntos_por_decada">
           <property name="enabled">
            <bool>true</bool>
@@ -97,17 +97,41 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0">
+        <item row="6" column="0">
          <widget class="QCheckBox" name="invertir_polaridad">
           <property name="text">
            <string>Invertir polaridad</string>
           </property>
          </widget>
         </item>
-        <item row="4" column="1">
+        <item row="6" column="1">
          <widget class="QCheckBox" name="invertir_orden">
           <property name="text">
            <string>Invertir orden</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Límite tensión</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLineEdit" name="limite_tension"/>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="label_4">
+          <property name="text">
+           <string>Tiempo en corriente final</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QLineEdit" name="estres">
+          <property name="text">
+           <string>0s</string>
           </property>
          </widget>
         </item>

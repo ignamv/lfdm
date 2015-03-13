@@ -4,7 +4,6 @@ import taskwrap
 import sys
 import numpy as np
 import logging
-import os
 
 from enum import Enum
 from lantz import Q_
@@ -12,7 +11,7 @@ from lantz.log import log_to_screen
 from matplotlib.backends import qt_compat
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
-from PyQt4.QtCore import pyqtSlot, QObject
+from PyQt4.QtCore import pyqtSlot
 from PyQt4.uic import loadUiType
 from qtdebug import set_trace
 
@@ -60,8 +59,10 @@ class VI_GUI(base):
         logger.debug("Initialization finished: %s", str(success))
         self.setMidiendo(False)
         self.savesettings = SaveSettings([
+            ('limite_tension', 'text'),
             ('corriente_inicial', 'text'),
             ('corriente_final', 'text'),
+            ('estres', 'text'),
             ('incremento', 'text'),
             ('puntos_por_decada', 'text'),
             ('lineal', 'checked'),
@@ -94,18 +95,19 @@ class VI_GUI(base):
     def medir(self):
         self.setMidiendo(True)
         yield from self.matriz.matrix_mode_async()
-        yield from self.matriz.close_async((2, 1))
-        yield from self.matriz.close_async((4, 2))
-        yield from self.matriz.close_async((4, 3))
-        yield from self.matriz.close_async((4, 4))
-        yield from self.electrometro.update_async(zero_check = False,
-                zero_correct = False)
+        # Pongo la fuente en corto
+        for channel in [(1, 1), (1, 4), (4, 2), (4, 3), (4, 4), (2, 1)]:
+            yield from self.matriz.close_async(channel)
         yield from self.i_src.update_async(
             current=self.corrientes[0],
-            voltage_limit = Q_(15, 'V'),
-            output = True)
+            voltage_limit = Q_(self.ui.limite_tension.text()).to('V'),
+            output = True, force=True)
+        yield from self.electrometro.update_async(zero_check = False,
+                zero_correct = False)
+        # Saco el corto
+        yield from self.matriz.open_async((1, 1))
         # Stabilize output
-        yield from asyncio.sleep(.5)
+        yield from asyncio.sleep(.9)
         for ii, corriente in enumerate(self.corrientes):
             if self.ui.invertir_polaridad.isChecked():
                 yield from self.i_src.update_async(current=-corriente)
@@ -114,13 +116,18 @@ class VI_GUI(base):
             logger.debug('Corriente %03d/%03d: %s', ii + 1,
                     len(self.corrientes), '{:.3e~}'.format(corriente))
             tension, nn = yield from self.electrometro.stable_voltage_async(
-                    .01)
+                    .1)
             logger.debug('Tensión: %s (%d mediciones)',
                     '{:.3e~}'.format(tension), nn)
             self.tensiones[ii] = tension
             self.lines.set_xdata(self.corrientes[:ii+1].magnitude)
             self.lines.set_ydata(self.tensiones[:ii+1].magnitude)
             self.plot.canvas.draw()
+            self.plot.update()
+            if ii == len(self.corrientes) - 1:
+                estres = Q_(self.ui.estres.text()).to('s')
+                logger.debug('Estresando durante %e s', estres.magnitude)
+                yield from asyncio.sleep(estres.magnitude)
 
     @asyncio.coroutine
     def terminar(self):
@@ -153,8 +160,13 @@ class VI_GUI(base):
             self.plot.canvas.draw()
 
     @pyqtSlot()
+    def on_terminar_clicked(self):
+        self.medir_task.cancel()
+
+    @pyqtSlot()
     @taskwrap.taskwrap
     def on_empezar_clicked(self):
+        self.medir_task = asyncio.Task.current_task()
         logger.debug('Empezar')
         corriente_inicial = Q_(self.ui.corriente_inicial.text()).to('A')
         corriente_final = Q_(self.ui.corriente_final.text()).to('A')
@@ -220,7 +232,7 @@ if __name__ == '__main__':
     consola = logging.StreamHandler()
     consola.setLevel(logging.DEBUG)
     logger.addHandler(consola)
-    logging.basicConfig(level=logging.DEBUG, filename='error.log', mode='w')
+    #logging.basicConfig(level=logging.DEBUG, filename='error.log', mode='w')
     app = QApplication(sys.argv)
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop) 
