@@ -30,7 +30,7 @@ class HP4277A (GPIBVisaDriver):
     def bias_voltage(self, value):
         self.send('BI{:+02.2f}EN'.format(value))
 
-    @Feat(units='kHz', limits=(10, 1000))
+    @Feat(units='kHz', limits=(10, 995))
     def frequency(self):
         return float(self.learn[0])
 
@@ -55,11 +55,11 @@ class HP4277A (GPIBVisaDriver):
         self.send('B' + value)
 
     @Feat(values=dict(auto='1', series='2', parallel='3'))
-    def circuit_mode(self):
+    def equivalent_circuit(self):
         return self.learn[3]
 
-    @circuit_mode.setter
-    def circuit_mode(self, value):
+    @equivalent_circuit.setter
+    def equivalent_circuit(self, value):
         self.send('C' + value)
 
     @Feat(values=dict(slow='1', medium='2', fast='3'))
@@ -86,12 +86,13 @@ class HP4277A (GPIBVisaDriver):
     def data_ready(self, value):
         self.send('D' + value)
 
-    @Feat(values=dict(low='0', high='1'))
-    def test_signal_level(self):
+    @Feat(values={'low': '1', 'high': '2'})
+    def drive_level(self):
+        """ low = 20mVrms, high = 1Vrms """
         return self.learn[12]
 
-    @test_signal_level.setter
-    def test_signal_level(self, value):
+    @drive_level.setter
+    def drive_level(self, value):
         self.send('V' + value)
 
     measure_re = re.compile(r'(?P<circuit_mode>[PS])(?P<statusA>[NDOUCB])'\
@@ -104,8 +105,9 @@ class HP4277A (GPIBVisaDriver):
         return match.groupdict()
 
     displays = ['A', 'B']
-    @DictFeat(values=dict(normal='N', deviation='D', overflow='O',
-        underflow='U', change_function='C', blank='B'), keys=displays)
+    status_codes = dict(normal='N', deviation='D', overflow='O',
+                        underflow='U', change_function='C', blank='B')
+    @DictFeat(values=status_codes, keys=displays)
     def display_status(self, key):
         return self.display()['status' + key]
 
@@ -121,14 +123,25 @@ class HP4277A (GPIBVisaDriver):
         while self.read_status() & 1 == 0:
             print(self.read_status())
             pass
-        disp = self.display
+        disp = self.display()
         for dd in self.displays:
-            if self.display_status[disp] != 'normal':
-                raise Exception('Status {}: {}'.format(disp,
-                    self.display_status[disp]))
+            if disp['status' + dd] != self.status_codes['normal']:
+                raise Exception('Status {}'.format(disp))
         ret = float(disp['valueA']) + 0j
         ret *= np.exp(1j * deg2rad(float(disp['valueB'])))
         return ret
+
+    @Feat()
+    def measure(self):
+        self.execute()
+        # Wait for data ready
+        while self.read_status() & 1 == 0:
+            pass
+        disp = self.display()
+        for dd in self.displays:
+            if disp['status' + dd] != self.status_codes['normal']:
+                raise Exception('Status {}'.format(disp))
+        return (float(disp['valueA']), float(disp['valueB']))
 
     def measure_stable(self, epsilon=1e-2):
         meas2 = self.measure
