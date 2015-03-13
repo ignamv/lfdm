@@ -13,5 +13,7 @@ class SaveSettings(QObject):
     def save(self):
         qset = QSettings()
         for child, property in self.properties:
-            qset.setValue(child + '/' + property,
-                    self.parent().findChild(QObject, child).property(property))
+            obj = self.parent().findChild(QObject, child)
+            if obj is None:
+                raise RuntimeError("Could not find " + child)
+            qset.setValue(child + '/' + property, obj.property(property))
