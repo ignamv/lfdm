@@ -10,6 +10,9 @@ class CV_Pulsada(object):
     SETUP_SUBIDA = 1
     SETUP_BAJADA = 2
 
+    # Máximo ancho de pulso del generador
+    generador_max = Q_(950, 'ms')
+
     def __init__(self, generador, osciloscopio):
         self.gen = generador
         self.gen.refresh()
@@ -23,14 +26,14 @@ class CV_Pulsada(object):
             raise Exception('No se pidió un flanco para capturar')
         leading, trailing = yield from self.gen.refresh_async(
                 ['leading_edge', 'trailing_edge'])
-        self.manual = ancho > Q_(950, 'ms')
+        self.manual = ancho > self.generador_max
         if self.manual:
             yield from self.gen.update_async(trigger_mode = 'external_width')
         else:
             yield from self.gen.update_async(width = ancho,
                     trigger_mode = 'trigger')
         settings = None
-        if capturar_subida and capturar_bajada:
+        if capturar_subida and capturar_bajada and not self.manual:
             # Configurar osciloscopio para capturar todo
             # Sin RUN actualiza el zoom en vez de la escala de adquisición
             settings = dict(delay = .5 * ancho, time_scale = 
@@ -78,12 +81,13 @@ class CV_Pulsada(object):
                 trigger_slope='rising', trigger_source=1, 
                 trigger_couple='dc', trigger_type='edge', 
                 record_length=1, voltage_scale={1: self.osc.fit_voltage(span)},
-                offset={1: -avg})
+                offset={1: -avg}, invert = {2: False})
         yield from self.osc.stop_async()
         yield from self.sleep(Q_(0.1, 's'))
 
     @asyncio.coroutine
     def pulso_manual(self):
+        flancos = []
         leading = self.gen.recall('leading_edge')
         trailing = self.gen.recall('trailing_edge')
         #yield from self.osc.recall_setup_async(self.SETUP_SUBIDA)
@@ -94,19 +98,29 @@ class CV_Pulsada(object):
                 self.osc.recall('time_scale') + Q_(0, 'ms'))
         # El instrumento interpreta el ancho como ancho altura mitad
         # Imito este comportamiento
-        subida_raw = yield from self.osc.acquire_async([1], False)
+        if self.capturar_subida:
+            subida_raw = yield from self.osc.acquire_async([1,2], False)
         #yield from self.osc.recall_setup_async(self.SETUP_BAJADA)
-        yield from self.osc.update_async(trigger_slope='falling')
+        yield from self.osc.update_async(trigger_slope='falling',
+                invert = { 2: True})
         yield from self.osc.run_async()
-        yield from self.sleep(self._ancho + .5 * (leading - trailing) 
-                - Q_(time.time() - beginning, 's'))
+        delay = self._ancho + .5 * (leading - trailing) - Q_(time.time() 
+                - beginning, 's')
+        if delay < Q_(0, 's'):
+            print("Pulso demasiado ancho por {:.3e~}".format(-delay))
+        else:
+            yield from self.sleep(delay)
         yield from self.gen.update_async(trigger_control = 'negative')
         yield from self.sleep(self.osc.xdivisions *
                 self.osc.recall('time_scale') + Q_(0, 'ms'))
-        bajada = yield from self.osc.acquire_async([1])
-        yield from self.osc.update_async(trigger_slope='rising')
-        subida = self.osc.process_data(subida_raw)
-        return (subida, bajada)
+        if self.capturar_bajada:
+            bajada = yield from self.osc.acquire_async([1,2])
+            flancos.append(bajada)
+        yield from self.osc.update_async(trigger_slope='rising', 
+                invert = {2: False})
+        if self.capturar_subida:
+            flancos.insert(0, self.osc.process_data(subida_raw))
+        return flancos
 
     @asyncio.coroutine
     def pulso_normal(self):
@@ -118,7 +132,7 @@ class CV_Pulsada(object):
         yield from self.gen.trigger_async()
         yield from self.sleep(self.osc.xdivisions *
                 self.osc.recall('time_scale'))
-        pulso = yield from self.osc.acquire_async([1])
+        pulso = yield from self.osc.acquire_async([1,2])
         return (pulso,)
 
     @asyncio.coroutine
