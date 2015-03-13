@@ -36,7 +36,7 @@ class Keithley220 (GPIBVisaDriver):
     
     @voltage_limit.setter
     def voltage_limit(self, value):
-        self.send('V{:.2E}X'.format(value))
+        self.send('V{:d}X'.format(value))
 
     @Feat(values={'auto': 0, 'nA': 1, '10nA': 2, '100nA': 3, '1uA': 4, 
         '10uA': 5, '100uA': 6, '1mA': 7, '10mA': 8, '100mA': 9})
