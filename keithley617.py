@@ -26,6 +26,11 @@ class Keithley617 (GPIBVisaDriver):
         self.execute()
         return self.recv()
 
+    @Feat(units='C')
+    def charge(self):
+        self.execute()
+        return self.recv()
+
     @Action()
     def stable_voltage(self, epsilon=.01):
         ret = self.voltage
