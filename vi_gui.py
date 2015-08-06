@@ -95,11 +95,12 @@ class VI_GUI(base):
     def medir(self):
         self.setMidiendo(True)
         yield from self.matriz.matrix_mode_async()
+        signo = [1, -1][self.ui.invertir_polaridad.isChecked()]
         # Pongo la fuente en corto
         for channel in [(1, 1), (1, 4), (4, 2), (4, 3), (4, 4), (2, 1)]:
             yield from self.matriz.close_async(channel)
         yield from self.i_src.update_async(
-            current=self.corrientes[0],
+            current=self.corrientes[0] * signo,
             voltage_limit = Q_(self.ui.limite_tension.text()).to('V'),
             output = True, force=True)
         yield from self.electrometro.update_async(zero_check = False,
@@ -109,10 +110,7 @@ class VI_GUI(base):
         # Stabilize output
         yield from asyncio.sleep(.9)
         for ii, corriente in enumerate(self.corrientes):
-            if self.ui.invertir_polaridad.isChecked():
-                yield from self.i_src.update_async(current=-corriente)
-            else:
-                yield from self.i_src.update_async(current=corriente)
+            yield from self.i_src.update_async(current=corriente * signo)
             logger.debug('Corriente %03d/%03d: %s', ii + 1,
                     len(self.corrientes), '{:.3e~}'.format(corriente))
             tension, nn = yield from self.electrometro.stable_voltage_async(
