@@ -52,7 +52,29 @@ class GwinstekLCR8110G (SerialDriver):
                     meas2) < epsilon:
                 return meas2
 
-        
+    @Feat(values=dict(C=0, L=1, X=2, B=3, Z=4, Y=5))
+    def function1(self):
+        return self.query(':meas:func:major?')
+
+    @function1.setter
+    def function1(self, value):
+        self.send(':meas:func:major {:d}'.format(value))
+
+    @Feat(values=dict(Q=0, D=1, R=2, G=3))
+    def function2(self):
+        return self.query(':meas:func:minor?')
+
+    @function2.setter
+    def function2(self, value):
+        self.send(':meas:func:minor {:d}'.format(value))
+
+    @Feat(values=dict(max=0, fast=1, med=2, slow=3))
+    def speed(self):
+        return self.query(':meas:speed?')
+
+    @speed.setter
+    def speed(self, value):
+        self.send(':meas:speed {:d}'.format(value))
 
 if __name__ == '__main__':
     inst = GwinstekLCR8110G(port=0, timeout=5)
