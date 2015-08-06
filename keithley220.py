@@ -7,8 +7,9 @@ class Keithley220 (GPIBVisaDriver):
 
     def initialize(self):
         super().initialize()
-        # Send data without prefix
-        self.send('G1X')
+        # Send IEEE buffer address without prefix
+        # Start on GPIB bus trigger
+        self.send('G3T2X')
 
     @Feat()
     def data(self):
@@ -26,6 +27,14 @@ class Keithley220 (GPIBVisaDriver):
     def output(self, enable):
         self.send('F{}X'.format(enable))
 
+    @Feat(values={'single': '0', 'continuous': '1', 'step': '2'})
+    def program(self):
+        return self.status[8]
+
+    @program.setter
+    def program(self, value):
+        self.send('P{}X'.format(value))
+
     @Action()
     def clear(self):
         self.send('DCL')
@@ -36,7 +45,7 @@ class Keithley220 (GPIBVisaDriver):
     
     @voltage_limit.setter
     def voltage_limit(self, value):
-        self.send('V{:d}X'.format(value))
+        self.send('V{:d}X'.format(int(value)))
 
     @Feat(values={'auto': 0, 'nA': 1, '10nA': 2, '100nA': 3, '1uA': 4, 
         '10uA': 5, '100uA': 6, '1mA': 7, '10mA': 8, '100mA': 9})
@@ -59,6 +68,33 @@ class Keithley220 (GPIBVisaDriver):
     def current(self, value):
         self.send('I{:.3E}X'.format(value))
 
+    @Feat(units='s', limits=(0, 999.9))
+    def dwell_time(self):
+        return self.data[2]
+
+    @dwell_time.setter
+    def dwell_time(self, value):
+        self.send('W{:.3E}X'.format(value))
+
+    @Feat(limits=(1,100))
+    def address(self):
+        return self.data[3]
+
+    @address.setter
+    def address(self, value):
+        self.send('B{:d}X'.format(value))
+
+    @Feat(limits=(1,100))
+    def display_address(self):
+        self.send('G1X')
+        ret = self.data[3]
+        self.send('G3X')
+        return ret
+
+    @display_address.setter
+    def display_address(self, value):
+        self.send('L{:d}X'.format(value))
+
     def finalize(self):
         self.output = False
         super().finalize()
@@ -69,5 +105,9 @@ if __name__ == '__main__':
     inst = Keithley220('GPIB0::12::INSTR')
     inst.initialize()
     print(repr(inst.status))
+    print(inst.dwell_time)
+    print(inst.address)
     inst.finalize()
+    print('Apriete Enter para salir')
+    input()
 
