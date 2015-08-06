@@ -1,5 +1,6 @@
 from lantz import Feat, Q_, Action, DictFeat
 from lantz.visa import GPIBVisaDriver
+from time import sleep
 import numpy as np
 import re
 
@@ -136,7 +137,7 @@ class HP4277A (GPIBVisaDriver):
         self.execute()
         # Wait for data ready
         while self.read_status() & 1 == 0:
-            pass
+            sleep(.05)
         disp = self.display()
         for dd in self.displays:
             if disp['status' + dd] != self.status_codes['normal']:
